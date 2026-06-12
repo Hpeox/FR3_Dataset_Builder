@@ -1,29 +1,38 @@
-# Open questions before implementing the HDF5 builder
+# Open questions and resolved decisions before implementing the HDF5 builder
 
 ## Row policy
 
-Should HDF5 `T` be:
+Resolved decision:
 
-- `aligned_manifest["sample_count"]` / `len(aligned_index["t_ns"])`, keeping invalid rows, or
-- `aligned_manifest["valid_count"]` / `aligned_index["sample_valid"] == True`, filtering invalid rows?
+- HDF5 `T = aligned_manifest["sample_count"] = len(aligned_index["t_ns"])`.
+- Export all aligned rows, including rows where `aligned_index["sample_valid"] == False`.
+- Record warnings with invalid HDF5 row indices and invalid stream names.
+- `invalid` does not necessarily mean the source index is missing. If a required stream has a valid non-negative source index, use that indexed source value and record the warning.
+- If a required stream index is `-1`, use the previous frame information for that stream.
+- If the first row for a required stream has index `-1` and no previous frame exists, remove that leading row from the HDF5 output.
+- Warnings must be printed to the terminal and written to a JSON sidecar report.
 
 The sampled first three demos have `sample_count == valid_count`, but `demo_20260605_165503` has `sample_count == 961` and `valid_count == 960`.
 
-The first builder should probably export only `sample_valid` rows unless a sentinel policy is explicitly required.
+The builder must not accidentally use `-1` as a valid Python index.
 
 ## Success label
 
-What should `/attrs/success` mean?
+Resolved decision:
 
-Current `manifest.status == "done"` means the capture transaction completed and required checks passed. It does not necessarily mean the task demonstration succeeded semantically.
+- For current processable demos, write `/attrs/success = True`.
+- Failed-demo labels can be added later when that workflow is implemented.
 
-No separate task-success label was found in manifests or sampled files.
+Current `manifest.status == "done"` still remains the processability gate together with `aligned_manifest.status == "done"`.
 
 ## Language instruction
 
-Where should `/attrs/language_instruction` come from?
+Resolved decision:
 
-No manifest field, sidecar annotation file, or code path was found that stores this value.
+- Use a placeholder string for now.
+- The placeholder should be a builder CLI/config value, because no raw manifest field, sidecar annotation file, or code path currently stores this value.
+- (from user) just use "a placeholder string" as the placeholder string
+- (from user) also leave a #TODO tag somewhere in the code, in the furture the string will be determined by specific key in manifest
 
 ## Camera semantic names
 
@@ -43,13 +52,14 @@ The HDF5 schema wants:
 - `depth/side`
 - `depth/wrist[..., camera_names=["wrist1", "wrist2"]]`
 
-Open mapping:
+Resolved mapping:
 
-- Which of `cam3` and `cam4` is `top`?
-- Which of `cam3` and `cam4` is `side`?
-- Should `wrist1 == cam1` and `wrist2 == cam2`, or is there a physical left/right/front/back naming convention?
+- `335122271402`: `wrist1`
+- `335122272872`: `wrist2`
+- `050222071619`: `top`
+- `337322074345`: `side`
 
-The builder should not guess this mapping silently.
+The builder should apply this serial-number mapping for the current dataset.
 
 ## Tactile semantic names
 
@@ -64,23 +74,20 @@ The HDF5 schema wants:
 sensor_names = ["left", "right"]
 ```
 
-Open mapping:
+Resolved mapping:
 
-- Which serial corresponds to `left`?
-- Which serial corresponds to `right`?
-- Should the builder store serial IDs as additional attrs even if HDF5 uses `left/right`?
+- `OG000544`: `left`
+- `OG001009`: `right`
 
-The builder should not hardcode `left/right` from the current sensor order without approval.
+The builder should stack tactile sensor dimension as `[left, right] == [OG000544, OG001009]`.
 
 ## Xense file loading strategy
 
 Xense external `.npy` files are scalar object arrays with GB-scale pickled contents.
 
-Open implementation choice:
+Resolved decision:
 
 - Load the whole object with `np.load(..., allow_pickle=True).item()` and stream rows from memory.
-- Convert or pre-index Xense external files into a safer intermediate format before HDF5 materialization.
-- Implement a dedicated reader for the current pickle/object format if partial loading is possible.
 
 This audit did not fully load a TAC sample to avoid expensive terminal-side work.
 
@@ -93,11 +100,7 @@ Current raw data requires:
 
 The future builder CLI should make the repo root explicit and should fail if the manifest path contract is violated.
 
-Open question:
-
-- Should `aligned_manifest["sources"]` be treated as the authority, or should the builder always start from `manifest.json` and only use `aligned_manifest` for cross-checks?
-
-Recommended conservative rule:
+Resolved decision:
 
 1. Start from `manifest.json`.
 2. Cross-check the same paths in `aligned_manifest["sources"]`.
@@ -107,8 +110,57 @@ Recommended conservative rule:
 
 The ZMQ payload defines `robot[28:44]` as `O_T_EE`.
 
-Open question:
+Resolved decision:
 
-- Should the HDF5 builder reshape this as C-order `[4, 4]`, or does the upstream Franka convention require a transpose for downstream consumers?
+- The `T` matrix should always have the same last row `[0, 0, 0, 1]`.
+- Reshape the 16 stored floats to `[4, 4]` and validate that last row.
 
-The schema says only "reshaped from 16 floats"; it does not state memory order.
+If this validation fails, the builder should fail or flag that row rather than silently accepting a malformed transform.
+
+# Resolved answers
+
+## Row policy
+Use all rows, but probably leave a warning with row index at somewhere
+
+(from user) invalid does not necessarily mean no valid index. If index is `-1`, use the previous frame information. Warnings should be printed to terminal and written to a JSON sidecar report.
+
+(from user) If the first row has `-1` and no previous frame exists, remove that first row directly.
+
+## Success label
+currently, all the label should be success, fail demo maybe will be implemented in the furture
+
+## Language instruction
+
+currently, use a placeholder instead
+
+## Camera semantic names
+
+a serial number to name map:
+
+- `335122271402`: wrist1
+- `335122272872`: wrist2
+- `050222071619`: top
+- `337322074345`: side
+
+## Tactile semantic names
+
+- `OG000544`: left
+- `OG001009`: right
+
+## Xense file loading strategy
+
+- Load the whole object with `np.load(..., allow_pickle=True).item()` and stream rows from memory.
+
+## Path anchor contract
+
+throw out an error if any mismatch between `manifest.json` and `aligned_manifest`
+
+just as the Recommended conservative rule:
+
+1. Start from `manifest.json`.
+2. Cross-check the same paths in `aligned_manifest["sources"]`.
+3. Fail on mismatch rather than guessing.
+
+## O_T_EE matrix order
+
+the T matrix should always have a same last row `[0, 0, 0, 1]`

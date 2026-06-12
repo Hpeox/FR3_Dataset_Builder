@@ -31,6 +31,8 @@ This is not bash-cwd relative. The builder should resolve paths from explicit an
 
 If any required path is missing for a done/aligned demo, the builder should fail that demo with a clear runtime error. It should not invent fallback paths from filenames.
 
+The builder should start from `manifest.json`, cross-check the same paths in `aligned_manifest["sources"]`, and fail the demo if any path mismatches. `aligned_manifest` is a consistency check, not a license to guess alternate locations.
+
 ## Alignment artifacts
 
 The builder should read:
@@ -55,6 +57,17 @@ For ZMQ streams, `<stream>_index` is an absolute row index into the mixed `zmq_t
 For FT300S and Xense, `<stream>_index` is a row index into the corresponding timestamp NPZ. Use that timestamp NPZ row's `frame_id` to access the external object `.npy` `frames_data` key.
 
 For RealSense, `<stream>_index` is a per-topic message index into the decoded list for that topic.
+
+Current row policy after review:
+
+- Export all aligned rows: `T = len(idx["t_ns"])`.
+- If `sample_valid` or a required `<stream>_valid` entry is false, record a warning with the HDF5 row index and invalid stream name.
+- `invalid` does not necessarily mean no usable source index exists. If the required stream index is non-negative, use the indexed source value and still record the warning.
+- If the required stream index is `-1`, use the previous frame information for that stream.
+- If the first row for a required stream has index `-1` and no previous frame exists, remove that leading row from the HDF5 output.
+- Print warnings to the terminal and write them to a JSON sidecar report.
+- Never use `-1` as a normal NumPy/Python index. The builder must not accidentally treat `-1` as "last row".
+- After leading-row removal, all remaining `-1` entries should have a previous stream frame available for reuse.
 
 ## NPZ files
 
@@ -114,7 +127,7 @@ Path source:
 manifest["sensor_paths"]["xense"]
 ```
 
-The current data points to scalar object `.npy` files under `runtime_frames/`. The files are large; this audit read their `.npy` headers and code paths but did not fully load a GB-scale TAC sample.
+The current data points to scalar object `.npy` files under `runtime_frames/`. The selected builder strategy is to load the whole object with `np.load(..., allow_pickle=True).item()` and stream rows from memory.
 
 Service-side save logic writes:
 
@@ -138,10 +151,10 @@ obj = {
 }
 ```
 
-Default service settings are currently:
+Sensor semantic mapping after review:
 
-- `sensor_id_0 = "OG000544"`
-- `sensor_id_1 = "OG001009"`
+- `OG000544`: `left`
+- `OG001009`: `right`
 
 Access pattern:
 
@@ -153,7 +166,7 @@ rec0 = frame[f"{sensor_id_0}_rec"]
 rec1 = frame[f"{sensor_id_1}_rec"]
 ```
 
-The builder should discover actual key prefixes from the loaded frame or from a future persisted metadata field, rather than relying only on current defaults.
+For the current dataset, stack tactile sensor dimension as `[left, right] == [OG000544, OG001009]`.
 
 ## RealSense rosbag
 
@@ -183,7 +196,12 @@ The sampled demos record eight image topics:
 - `/cam4/camera/color/image_raw`
 - `/cam4/camera/aligned_depth_to_color/image_raw`
 
-Repository RealSense docs identify `cam1` and `cam2` as wrist cameras, and `cam3` and `cam4` as global cameras. They do not identify which global camera is `top` and which is `side`.
+Camera semantic mapping after review:
+
+- `335122271402` / `cam1`: `wrist1`
+- `335122272872` / `cam2`: `wrist2`
+- `337322074345` / `cam3`: `side`
+- `050222071619` / `cam4`: `top`
 
 ## ZMQ telemetry
 
@@ -214,6 +232,8 @@ source=3 gripper:
   gripper_gPO
   gripper_gCU
 ```
+
+For `O_T_EE`, reshape `floats_58[36:52]` to `[4, 4]` and validate that the last row is `[0, 0, 0, 1]`.
 
 Sample data confirmed:
 

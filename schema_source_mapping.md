@@ -24,52 +24,55 @@ The sampled demos all use `aligned/aligned_index.npz` with `schema_version: 3`, 
 Let:
 
 - `idx = np.load(demo_dir / "aligned" / "aligned_index.npz")`
-- `T_raw = len(idx["t_ns"])`
-- `row_mask = idx["sample_valid"]`
-- `rows = np.nonzero(row_mask)[0]` if the builder exports only fully valid aligned rows.
+- `T = len(idx["t_ns"])`
+- `rows = np.arange(T)`
 
-The current raw data proves two possible HDF5 row policies:
+Decision after review:
 
-- Export all aligned rows: `T = T_raw`; every dataset must define what to do when a stream index is `-1` or `<stream>_valid == False`.
-- Export only valid rows: `T = int(idx["sample_valid"].sum())`; all data access below uses `rows`.
+- Export all aligned rows, including rows where `idx["sample_valid"] == False`.
+- `invalid` does not necessarily mean a missing source index. If a required stream is invalid but its source index is non-negative, use that indexed source value and record the warning.
+- If a required stream index is `-1`, reuse the previous frame information for that stream.
+- If the first row for a required stream has index `-1` and no previous frame exists, remove that leading row from the HDF5 output.
+- Print warnings to the terminal and write the same warning records to a JSON sidecar report.
+- Do not silently use `-1` as a normal Python/NumPy index. In particular, the builder must not let Python indexing select the last raw row.
 
-This audit recommends the valid-row policy for the first builder, but the schema does not explicitly say whether `T` is `sample_count` or `valid_count`. This is listed in `open_questions.md`.
+After leading-row removal, all remaining `-1` entries should have a previous stream frame available for reuse.
 
 ## Mapping table
 
 | HDF5 path | Source | Access method | Shape | Dtype | Indexing rule | Status | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `/attrs/demo_id` | demo directory | `demo_dir.name` | scalar | string | one value per HDF5 file | confirmed | Computed from the selected demo directory name. |
-| `/attrs/success` | `manifest.json` | No explicit raw field found. `manifest.status == "done"` only proves capture completion. | scalar | bool | one value per HDF5 file | ambiguous | Task success and capture success may not be the same label. |
-| `/attrs/total_steps` | `aligned_manifest.json` / `aligned_index.npz` | `aligned_manifest["valid_count"]` if using valid-row export, otherwise `aligned_manifest["sample_count"]`; cross-check with `len(idx["t_ns"])`. | scalar | int | one value per HDF5 file | ambiguous | Schema does not define whether invalid aligned samples are kept or filtered. |
+| `/attrs/success` | builder policy / `manifest.json` | For current demos, write `True` for every processable demo. Future failed-demo labels can extend this later. | scalar | bool | one value per HDF5 file | confirmed | Processable demos still require `manifest.status == "done"` and `aligned_manifest.status == "done"`. |
+| `/attrs/total_steps` | `aligned_manifest.json` / `aligned_index.npz` | `len(idx["t_ns"])`; cross-check with `aligned_manifest["sample_count"]`. | scalar | int | one value per HDF5 file | confirmed | Current decision is to export all aligned rows, not only `sample_valid` rows. |
 | `/attrs/schema_version` | builder policy | Constant `"v0.1"` from `HDF5_schema.md`. | scalar | string | one value per HDF5 file | not_implemented_yet | Not stored in raw demo. |
 | `/attrs/nominal_hz` | `aligned_manifest.json` / builder policy | `aligned_manifest["hz"]` when present; sampled demos show `30.0`. | scalar | int/float | one value per HDF5 file | confirmed | HDF5 schema wants `30`; alignment artifacts store `30.0`. |
-| `/attrs/language_instruction` | not found | No manifest or sidecar field found in sampled demos or code search. | scalar | string | one value per HDF5 file | missing | Needs an annotation source or default policy. |
+| `/attrs/language_instruction` | builder policy | Use the literal placeholder string `"a placeholder string"` for now. | scalar | string | one value per HDF5 file | confirmed | No raw annotation source exists yet. When implementing the builder, leave a `# TODO` near this assignment: future versions should read the string from a specific manifest key. |
 | `/attrs/spatial_chunk_t` | builder policy | Constant `8` from schema. | scalar | int | one value per HDF5 file | not_implemented_yet | Compression/chunk metadata is not raw data. |
 | `/attrs/lowdim_chunk_t` | builder policy | `min(T, 512)` from schema. | scalar | int | one value per HDF5 file | not_implemented_yet | Depends on chosen `T`. |
 | `/attrs/compression` | builder policy | Constant `"zstd"` from schema. | scalar | string | one value per HDF5 file | not_implemented_yet | HDF5 writer policy. |
 | `/attrs/compression_level` | builder policy | Constant `12` from schema. | scalar | int | one value per HDF5 file | not_implemented_yet | HDF5 writer policy. |
-| `/actions/gello_q` | `zmq_telemetry.npz` | `z = np.load(demo_dir / manifest["npz"]["zmq"]); src_rows = idx["zmq_source_1_index"][rows]; z["floats_58"][src_rows, 0:7]` | `[T, 7]` | float64 | `zmq_source_1_index` is an absolute row index into the mixed ZMQ table. Require `idx["zmq_source_1_valid"][rows]`. | confirmed | Directly stored in ZMQ payload, then copied by aligned index. `source=1` is GELLO. |
+| `/actions/gello_q` | `zmq_telemetry.npz` | `z = np.load(demo_dir / manifest["npz"]["zmq"]); src_rows = idx["zmq_source_1_index"][rows]; z["floats_58"][src_rows, 0:7]` | `[T, 7]` | float64 | `zmq_source_1_index` is an absolute row index into the mixed ZMQ table. If valid flag is false but index is non-negative, use that index and warn; if index is `-1`, reuse previous stream frame. | confirmed | Directly stored in ZMQ payload, then copied by aligned index. `source=1` is GELLO. |
 | `/actions/gello_gripper_cmd` | `zmq_telemetry.npz` | `z["floats_58"][idx["zmq_source_1_index"][rows], 7]` | `[T]` | float64 | Same as GELLO rows. | confirmed | Directly stored in ZMQ payload. |
-| `/observations/robot_state/q` | `zmq_telemetry.npz` | `z["floats_58"][idx["zmq_source_2_index"][rows], 8:15]` | `[T, 7]` | float64 | `zmq_source_2_index` is an absolute row index into the mixed ZMQ table. Require `idx["zmq_source_2_valid"][rows]`. | confirmed | `source=2` is robot; robot payload begins at `floats_58[8]`. |
+| `/observations/robot_state/q` | `zmq_telemetry.npz` | `z["floats_58"][idx["zmq_source_2_index"][rows], 8:15]` | `[T, 7]` | float64 | `zmq_source_2_index` is an absolute row index into the mixed ZMQ table. Apply the common invalid-index policy: warn on invalid, use non-negative indices, and reuse previous stream frame for `-1`. | confirmed | `source=2` is robot; robot payload begins at `floats_58[8]`. |
 | `/observations/robot_state/dq` | `zmq_telemetry.npz` | `z["floats_58"][idx["zmq_source_2_index"][rows], 15:22]` | `[T, 7]` | float64 | Same as robot rows. | confirmed | Directly stored, then copied. |
 | `/observations/robot_state/tau_J` | `zmq_telemetry.npz` | `z["floats_58"][idx["zmq_source_2_index"][rows], 22:29]` | `[T, 7]` | float64 | Same as robot rows. | confirmed | Directly stored, then copied. |
 | `/observations/robot_state/tau_J_d` | `zmq_telemetry.npz` | `z["floats_58"][idx["zmq_source_2_index"][rows], 29:36]` | `[T, 7]` | float64 | Same as robot rows. | confirmed | Directly stored, then copied. |
-| `/observations/robot_state/O_T_EE` | `zmq_telemetry.npz` | `z["floats_58"][idx["zmq_source_2_index"][rows], 36:52].reshape(T, 4, 4)` | `[T, 4, 4]` | float64 | Same as robot rows. | confirmed | Computed by reshaping 16 stored floats. Matrix layout should follow the upstream telemetry convention. |
+| `/observations/robot_state/O_T_EE` | `zmq_telemetry.npz` | `z["floats_58"][idx["zmq_source_2_index"][rows], 36:52].reshape(T, 4, 4)` | `[T, 4, 4]` | float64 | Same as robot rows. | confirmed | Computed by reshaping 16 stored floats. Validate that the last row is `[0, 0, 0, 1]`; otherwise fail or flag the row. |
 | `/observations/robot_state/O_dP_EE` | `zmq_telemetry.npz` | `z["floats_58"][idx["zmq_source_2_index"][rows], 52:58]` | `[T, 6]` | float64 | Same as robot rows. | confirmed | Directly stored, then copied. |
-| `/observations/gripper/gPO` | `zmq_telemetry.npz` | `z["gripper_gPO"][idx["zmq_source_3_index"][rows]].astype(np.uint8)` | `[T]` | uint8 | `zmq_source_3_index` is an absolute row index into the mixed ZMQ table. Require `idx["zmq_source_3_valid"][rows]`. | confirmed | Protocol stores raw Robotiq feedback bytes; NPZ array dtype is `int64`, so HDF5 writer casts to `uint8`. |
+| `/observations/gripper/gPO` | `zmq_telemetry.npz` | `z["gripper_gPO"][idx["zmq_source_3_index"][rows]].astype(np.uint8)` | `[T]` | uint8 | `zmq_source_3_index` is an absolute row index into the mixed ZMQ table. Apply the common invalid-index policy. | confirmed | Protocol stores raw Robotiq feedback bytes; NPZ array dtype is `int64`, so HDF5 writer casts to `uint8`. |
 | `/observations/gripper/gCU` | `zmq_telemetry.npz` | `z["gripper_gCU"][idx["zmq_source_3_index"][rows]].astype(np.uint8)` | `[T]` | uint8 | Same as gripper rows. | confirmed | Stored as protocol byte, persisted as `int64`, copied with cast. |
-| `/observations/ft300s/wrench` | external `runtime_frames` + `ft300_timestamps.npz` | Resolve `manifest["sensor_paths"]["ft300"]` as repo-root-relative path. Load object dict with `np.load(path, allow_pickle=True).item()`. For each row: `i = idx["ft300s_index"][row]`; `frame_id = ft_npz["frame_id"][i]`; `frame = obj["frames_data"][f"{frame_id:05d}"]`; read `frame["ft300_wrench"]`. | `[T, 6]` | float32 in HDF5; raw sampled value is float64 | `ft300s_index` is a row index into `ft300_timestamps.npz`; use `frame_id` to access external `frames_data`. Require `idx["ft300s_valid"][rows]`. | confirmed | Directly stored in FT external file as float64 wrench. Schema requests float32, so builder must cast. Do not use filename guessing; use manifest path. |
-| `/observations/rgb/top` | rosbag image topic | Candidate source is one of global RealSense color topics, decoded from `rosbag_uri`. Use per-topic message lists indexed by `idx["realsense_cam*_color_index"][rows]`. | `[T, 480, 640, 3]` | uint8 | Per-stream RealSense indices are per-topic message indices, not mixed rosbag row numbers. | ambiguous | Raw data confirms `cam3` and `cam4` are `global`, but no repository source maps which is `top` vs `side`. |
-| `/observations/rgb/side` | rosbag image topic | Same as `rgb/top`. | `[T, 480, 640, 3]` | uint8 | Same as `rgb/top`. | ambiguous | Needs authoritative `top`/`side` camera mapping. |
-| `/observations/rgb/wrist` | rosbag image topics | Decode `/cam1/camera/color/image_raw` and `/cam2/camera/color/image_raw`; stack in schema order once `wrist1/wrist2` order is approved. | `[T, 2, 480, 640, 3]` | uint8 | Use `realsense_cam1_color_index` and `realsense_cam2_color_index`. | partially_confirmed | Repo marks `cam1` and `cam2` as wrist cameras. The semantic order `wrist1`, `wrist2` is not explicitly defined beyond `cam1`, `cam2`. |
-| `/observations/depth/top` | rosbag image topic | Candidate source is one of global RealSense aligned depth topics; decode `16UC1` data to `uint16` shape `[480, 640]`. | `[T, 480, 640]` | uint16 | Per-stream RealSense aligned-depth index. | ambiguous | Same `top`/`side` mapping gap as RGB. |
-| `/observations/depth/side` | rosbag image topic | Same as `depth/top`. | `[T, 480, 640]` | uint16 | Per-stream RealSense aligned-depth index. | ambiguous | Same `top`/`side` mapping gap as RGB. |
-| `/observations/depth/wrist` | rosbag image topics | Decode `/cam1/camera/aligned_depth_to_color/image_raw` and `/cam2/camera/aligned_depth_to_color/image_raw`; stack in schema order once `wrist1/wrist2` order is approved. | `[T, 2, 480, 640]` | uint16 | Use `realsense_cam1_aligned_depth_index` and `realsense_cam2_aligned_depth_index`. | partially_confirmed | Sample rosbag messages confirm `encoding == "16UC1"`, `height == 480`, `width == 640`, `step == 1280`. |
-| `/observations/tactile_images/rgb` | external Xense `runtime_frames` | Resolve `manifest["sensor_paths"]["xense"]` as repo-root-relative path. Load object dict. For each row: `i = idx["xense_pair_source_index"][row]`; `frame_id = xense_npz["frame_id"][i]`; `frame = obj["frames_data"][f"{frame_id:05d}"]`; read `<sensor_id_0>_rec` and `<sensor_id_1>_rec`, stack as sensor dimension. | `[T, 2, 700, 400, 3]` | uint8 | Xense pair uses one same-row index for both sensors. Require `xense_pair_valid`, `xense_0_valid`, and `xense_1_valid`. | partially_confirmed | Code confirms keys and shapes. Sample files are scalar object `.npy` with GB-scale payloads, so this audit did not fully load a TAC file. Mapping to schema names `left`/`right` is not persisted in manifest. |
-| `/observations/tactile/force` | external Xense `runtime_frames` | Same Xense row access; read `<sensor_id_0>_force` and `<sensor_id_1>_force`. | `[T, 2, 35, 20, 3]` | float64 | Same-row Xense pair index. | partially_confirmed | Code confirms selected SDK output `Sensor.OutputType.Force` and shape in SHM comments. Sensor semantic names remain ambiguous. |
-| `/observations/tactile/force_norm` | external Xense `runtime_frames` | Same Xense row access; read `<sensor_id_0>_force_norm` and `<sensor_id_1>_force_norm`. | `[T, 2, 35, 20, 3]` | float64 | Same-row Xense pair index. | partially_confirmed | Code confirms selected SDK output `Sensor.OutputType.ForceNorm`. |
-| `/observations/tactile/force_resultant` | external Xense `runtime_frames` | Same Xense row access; read `<sensor_id_0>_force_resultant` and `<sensor_id_1>_force_resultant`. | `[T, 2, 6]` | float64 | Same-row Xense pair index. | partially_confirmed | Code confirms selected SDK output `Sensor.OutputType.ForceResultant`. |
+| `/observations/ft300s/wrench` | external `runtime_frames` + `ft300_timestamps.npz` | Resolve `manifest["sensor_paths"]["ft300"]` as repo-root-relative path. Load object dict with `np.load(path, allow_pickle=True).item()`. For each row: `i = idx["ft300s_index"][row]`; `frame_id = ft_npz["frame_id"][i]`; `frame = obj["frames_data"][f"{frame_id:05d}"]`; read `frame["ft300_wrench"]`. | `[T, 6]` | float32 in HDF5; raw sampled value is float64 | `ft300s_index` is a row index into `ft300_timestamps.npz`; use `frame_id` to access external `frames_data`. Apply the common invalid-index policy. | confirmed | Directly stored in FT external file as float64 wrench. Schema requests float32, so builder must cast. Do not use filename guessing; use manifest path. |
+| `/observations/rgb/top` | rosbag image topic | Decode `/cam4/camera/color/image_raw` from `rosbag_uri`; serial `050222071619` maps to `top`. | `[T, 480, 640, 3]` | uint8 | Use `realsense_cam4_color_index`. | confirmed | Per-stream RealSense indices are per-topic message indices, not mixed rosbag row numbers. |
+| `/observations/rgb/side` | rosbag image topic | Decode `/cam3/camera/color/image_raw` from `rosbag_uri`; serial `337322074345` maps to `side`. | `[T, 480, 640, 3]` | uint8 | Use `realsense_cam3_color_index`. | confirmed | Per-stream RealSense indices are per-topic message indices. |
+| `/observations/rgb/wrist` | rosbag image topics | Decode `/cam1/camera/color/image_raw` and `/cam2/camera/color/image_raw`; serials `335122271402` and `335122272872` map to `wrist1` and `wrist2`. | `[T, 2, 480, 640, 3]` | uint8 | Use `realsense_cam1_color_index` and `realsense_cam2_color_index`; stack as `[wrist1, wrist2]`. | confirmed | Sample rosbag messages confirm `encoding == "rgb8"`, `height == 480`, `width == 640`, `step == 1920`. |
+| `/observations/depth/top` | rosbag image topic | Decode `/cam4/camera/aligned_depth_to_color/image_raw`; serial `050222071619` maps to `top`. | `[T, 480, 640]` | uint16 | Use `realsense_cam4_aligned_depth_index`. | confirmed | Decode `16UC1` to `uint16`. |
+| `/observations/depth/side` | rosbag image topic | Decode `/cam3/camera/aligned_depth_to_color/image_raw`; serial `337322074345` maps to `side`. | `[T, 480, 640]` | uint16 | Use `realsense_cam3_aligned_depth_index`. | confirmed | Decode `16UC1` to `uint16`. |
+| `/observations/depth/wrist` | rosbag image topics | Decode `/cam1/camera/aligned_depth_to_color/image_raw` and `/cam2/camera/aligned_depth_to_color/image_raw`; stack as `[wrist1, wrist2]`. | `[T, 2, 480, 640]` | uint16 | Use `realsense_cam1_aligned_depth_index` and `realsense_cam2_aligned_depth_index`. | confirmed | Sample rosbag messages confirm `encoding == "16UC1"`, `height == 480`, `width == 640`, `step == 1280`. |
+| `/observations/tactile_images/rgb` | external Xense `runtime_frames` | Resolve `manifest["sensor_paths"]["xense"]` as repo-root-relative path. Load the whole object dict with `np.load(..., allow_pickle=True).item()`. For each row: `i = idx["xense_pair_source_index"][row]`; `frame_id = xense_npz["frame_id"][i]`; `frame = obj["frames_data"][f"{frame_id:05d}"]`; read `OG000544_rec` as left and `OG001009_rec` as right. | `[T, 2, 700, 400, 3]` | uint8 | Xense pair uses one same-row index for both sensors. Apply the common invalid-index policy. | confirmed | Sensor dimension order is `[left, right] == [OG000544, OG001009]`. |
+| `/observations/tactile/force` | external Xense `runtime_frames` | Same Xense row access; read `OG000544_force` as left and `OG001009_force` as right. | `[T, 2, 35, 20, 3]` | float64 | Same-row Xense pair index. | confirmed | Code confirms selected SDK output `Sensor.OutputType.Force` and shape in SHM comments. |
+| `/observations/tactile/force_norm` | external Xense `runtime_frames` | Same Xense row access; read `OG000544_force_norm` as left and `OG001009_force_norm` as right. | `[T, 2, 35, 20, 3]` | float64 | Same-row Xense pair index. | confirmed | Code confirms selected SDK output `Sensor.OutputType.ForceNorm`. |
+| `/observations/tactile/force_resultant` | external Xense `runtime_frames` | Same Xense row access; read `OG000544_force_resultant` as left and `OG001009_force_resultant` as right. | `[T, 2, 6]` | float64 | Same-row Xense pair index. | confirmed | Code confirms selected SDK output `Sensor.OutputType.ForceResultant`. |
 
 ## RealSense topic access details
 
@@ -90,6 +93,13 @@ Access method:
 6. For each HDF5 row, use the matching `aligned_index.npz` per-stream index to select the decoded per-topic message.
 
 Sample verification decoded all eight required image topics from `demo_20260601_194946`; color topics were `rgb8` with `[480, 640, 3]` `uint8`, aligned depth topics were `16UC1` with `[480, 640]` `uint16`.
+
+Camera semantic mapping after review:
+
+- `335122271402` / `cam1`: `wrist1`
+- `335122272872` / `cam2`: `wrist2`
+- `337322074345` / `cam3`: `side`
+- `050222071619` / `cam4`: `top`
 
 ## ZMQ payload split
 

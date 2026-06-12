@@ -51,7 +51,7 @@ The user-provided example `demo_20260605_165503` was also spot-checked manually:
 
 - `sample_count`: `961`
 - `valid_count`: `960`
-- This confirms that done/aligned demos may still have at least one invalid aligned row.
+- This confirms that done/aligned demos may still have invalid aligned rows. After review, the HDF5 builder should still export all aligned rows and record warnings for invalid row indices.
 
 ## Sample file presence
 
@@ -110,12 +110,10 @@ Required topics came from `manifest["realsense_image_readiness"]["required_topic
 
 Repository camera role mapping:
 
-- `cam1`: wrist
-- `cam2`: wrist
-- `cam3`: global
-- `cam4`: global
-
-No repo source was found that maps `cam3`/`cam4` to schema names `top`/`side`.
+- `cam1` / serial `335122271402`: `wrist1`
+- `cam2` / serial `335122272872`: `wrist2`
+- `cam3` / serial `337322074345`: `side`
+- `cam4` / serial `050222071619`: `top`
 
 ## FT300S external data verification
 
@@ -167,7 +165,12 @@ Code and README comments confirm shapes:
 - `force_norm`: `[35, 20, 3]`, `float64`
 - `force_resultant`: `[6]`, `float64`
 
-Default sensor IDs in code are `OG000544` and `OG001009`. The schema names are `left` and `right`, which were not found as persisted raw metadata.
+Tactile semantic mapping after review:
+
+- `OG000544`: `left`
+- `OG001009`: `right`
+
+The selected builder strategy is to load the whole Xense object with `np.load(..., allow_pickle=True).item()` and stream rows from memory.
 
 ## ZMQ verification
 
@@ -185,11 +188,19 @@ This matches `Zmq_Ref/Readme.md` and `MainController` protocol constants.
 
 Most numeric, tactile, and image arrays can be obtained from current raw data plus existing alignment outputs.
 
-Items not fully resolved from repository/sample data:
+Resolved by review answers:
 
-- HDF5 `success` semantic source
-- HDF5 `language_instruction` source
-- whether HDF5 `T` should be `sample_count` or `valid_count`
-- camera semantic mapping for `top` and `side`
-- tactile semantic mapping from `OG000544`/`OG001009` to `left`/`right`
-- whether to hard-fail or filter when `sample_valid` contains false rows
+- HDF5 should use all aligned rows, with warnings for invalid row indices and invalid stream names.
+- `invalid` does not necessarily mean no usable source index exists; non-negative indices should still be used with a warning.
+- If a required stream index is `-1`, use the previous frame information for that stream.
+- If the first row for a required stream has index `-1` and no previous frame exists, remove that leading row from the HDF5 output.
+- Warnings should be printed to the terminal and written to a JSON sidecar report.
+- `/attrs/success` should currently be `True` for all processable demos.
+- `/attrs/language_instruction` should currently use the literal placeholder string `"a placeholder string"`; future builder code should leave a `# TODO` for reading this from a specific manifest key.
+- RealSense `top`/`side`/`wrist1`/`wrist2` mapping is serial-number based.
+- Xense `left`/`right` mapping is serial-number based.
+- Xense external `.npy` should be loaded as a whole object.
+- `manifest.json` and `aligned_manifest["sources"]` path mismatches should fail the demo.
+- `O_T_EE` should have last row `[0, 0, 0, 1]`.
+
+No unresolved row-policy decisions remain from this audit pass.
