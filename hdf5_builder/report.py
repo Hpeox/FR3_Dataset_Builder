@@ -19,11 +19,13 @@ class BuildReport:
     source_paths: dict[str, str] = field(default_factory=dict)
     total_aligned_rows: int = 0
     exported_rows: int = 0
+    emit_warnings: bool = True
 
     def warn(self, **record: Any) -> None:
         payload = {"level": "warning", "demo_id": self.demo_id, **record}
         self.warnings.append(payload)
-        print(json.dumps(payload, ensure_ascii=True), flush=True)
+        if self.emit_warnings:
+            print(json.dumps(payload, ensure_ascii=True), flush=True)
 
     def payload(self) -> dict[str, Any]:
         return {
@@ -44,4 +46,3 @@ class BuildReport:
             json.dumps(self.payload(), indent=2, ensure_ascii=True),
             encoding="utf-8",
         )
-

@@ -108,6 +108,7 @@ class DemoBuildContext:
     repo_root: Path = DEFAULT_REPO_ROOT
     report_path: Path | None = None
     min_free_gb: float = 20.0
+    emit_warnings: bool = True
     manifest: dict[str, Any] = field(init=False)
     aligned_manifest: dict[str, Any] = field(init=False)
     alignment_config: dict[str, Any] = field(init=False)
@@ -160,6 +161,7 @@ class DemoBuildContext:
             report_path=self.report_path,
             total_aligned_rows=len(self.aligned_index["t_ns"]),
             source_paths=self.source_path_report(),
+            emit_warnings=self.emit_warnings,
         )
         self.aligned_rows, self.resolved_indices = self._resolve_export_rows()
         self.report.exported_rows = len(self.aligned_rows)

@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from hdf5_builder.context import DATASET_BUILDER_ROOT, DEFAULT_REPO_ROOT, DemoBuildContext
+from hdf5_builder.manifest_update import mark_h5_generated
 from hdf5_builder.writer import write_hdf5
 
 
@@ -24,6 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report", type=Path, default=None, help="optional JSON sidecar report path")
     parser.add_argument("--overwrite", action="store_true", help="replace an existing output .h5")
     parser.add_argument("--min-free-gb", type=float, default=20.0, help="minimum free space required on output filesystem")
+    parser.add_argument("--no-update-manifest", action="store_true", help="do not set manifest h5_generated=true after success")
     return parser.parse_args()
 
 
@@ -38,6 +40,15 @@ def main() -> int:
         min_free_gb=args.min_free_gb,
     )
     write_hdf5(ctx, overwrite=args.overwrite)
+    manifest_updated = False
+    if not args.no_update_manifest:
+        try:
+            mark_h5_generated(ctx.manifest_path)
+            manifest_updated = True
+        except Exception as exc:
+            raise RuntimeError(
+                f"HDF5 was generated at {ctx.output_path}, but manifest h5_generated update failed: {exc}"
+            ) from exc
     print(
         json.dumps(
             {
@@ -48,6 +59,7 @@ def main() -> int:
                 "total_aligned_rows": ctx.report.total_aligned_rows,
                 "exported_rows": ctx.report.exported_rows,
                 "warning_count": len(ctx.report.warnings),
+                "manifest_updated": manifest_updated,
             },
             indent=2,
             ensure_ascii=True,
