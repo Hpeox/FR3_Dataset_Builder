@@ -1,4 +1,24 @@
-# Open questions and resolved decisions before implementing the HDF5 builder
+# Open questions and resolved decisions
+
+## Cold-storage/archive open questions
+
+No unresolved archive-related questions remain after this inspection pass.
+
+Resolved archive decisions:
+
+- Archive creation should start from `runtime_sessions/demos/demo_xxx/manifest.json`.
+- Archive creation should not write archive state into the raw demo's `manifest.json`.
+- The bundle must include the complete demo directory, external FT/TAC `.npy` files referenced by `manifest["sensor_paths"]`, and the selected TAC runtime config files.
+- For TAC runtime config, parse the timestamp from `data_TAC_YYYYMMDD_HHMMSS.npy` and choose the latest timestamped `runtime_frames/YYYYMMDD_HHMMSS/` directory earlier than that TAC timestamp.
+- The bundle should normalize selected config files under `runtime_frames/runtime_config/`, while archive metadata records the original selected timestamp directory for deterministic restore.
+- `.npy` files should be compressed with `zstd -T0 -19` and validated with `zstd -t`.
+- Rosbags should be converted to MCAP with internal zstd compression and validated by successful conversion, non-empty `rosbag_0.mcap`, and existing `metadata.yaml`.
+- The outer ZIP should use ZIP64, store already-compressed files, and deflate small text/metadata files.
+- Restore destinations are fixed: `demo/` goes back to `runtime_sessions/demos/demo_xxx/`, and `runtime_frames/` resources go back under their original `runtime_frames/` locations.
+- Restore should not overwrite existing files unless an explicit force option is used.
+- Interrupted or failed archive builds remain `not_archived` unless both the final ZIP and external `demo_xxx.archive.json` are successfully published.
+
+The sections below preserve HDF5-related resolved decisions that remain relevant context for archive resource discovery.
 
 ## Row policy
 

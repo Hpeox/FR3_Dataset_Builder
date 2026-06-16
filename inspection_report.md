@@ -161,9 +161,14 @@ Code inspection confirms the saved structure:
 Code and README comments confirm shapes:
 
 - `rec`: `[700, 400, 3]`, `uint8`
-- `force`: `[35, 20, 3]`, `float64`
-- `force_norm`: `[35, 20, 3]`, `float64`
-- `force_resultant`: `[6]`, `float64`
+- `force`: `[35, 20, 3]`, raw dtype may be `float32` or `float64`
+- `force_norm`: `[35, 20, 3]`, raw dtype may be `float32` or `float64`
+- `force_resultant`: `[6]`, raw dtype may be `float32` or `float64`
+
+The HDF5 schema now normalizes `/observations/tactile/force`,
+`/observations/tactile/force_norm`, and `/observations/tactile/force_resultant`
+to `float32` to support Xense SDK 2.0 output while remaining compatible with older
+`float64` saved files.
 
 Tactile semantic mapping after review:
 
@@ -171,6 +176,81 @@ Tactile semantic mapping after review:
 - `OG001009`: `right`
 
 The selected builder strategy is to load the whole Xense object with `np.load(..., allow_pickle=True).item()` and stream rows from memory.
+
+## Cold-storage/archive inspection
+
+This pass inspected archive feasibility only. It did not implement archive, compression, validation, restore, or raw-release code.
+
+Representative completed demos inspected for archive planning:
+
+| demo | reason selected | manifest status | aligned status | FT external file | TAC external file | selected TAC runtime config |
+| --- | --- | --- | --- | --- | --- | --- |
+| `demo_20260601_194946` | early processable sample from the HDF5 audit | `done` | `done` | `runtime_frames/data_FT_20260601_194946.npy` | `runtime_frames/data_TAC_20260601_194946.npy` | `runtime_frames/20260601_194926` |
+| `demo_20260602_094855` | active IDE-context demo | `done` | `done` | `runtime_frames/data_FT_20260602_094855.npy` | `runtime_frames/data_TAC_20260602_094855.npy` | `runtime_frames/20260602_094544` |
+| `demo_20260605_165503` | task-provided archive layout example | `done` | `done` | `runtime_frames/data_FT_20260605_165503.npy` | `runtime_frames/data_TAC_20260605_165503.npy` | `runtime_frames/20260605_163106` |
+
+### Archive resource discovery
+
+For the sampled demos, all archive resources can be located from existing metadata plus the TAC runtime config timestamp rule:
+
+- demo-owned files come from the complete `runtime_sessions/demos/demo_xxx/` directory
+- NPZ files are listed in `manifest["npz"]`
+- rosbag directory is listed in `manifest["rosbag_uri"]`
+- external FT and TAC `.npy` files are listed in `manifest["sensor_paths"]`
+- `aligned_manifest["sources"]` matches the manifest paths for external sensor files and rosbag URI
+- TAC runtime config is selected by parsing the timestamp in `data_TAC_YYYYMMDD_HHMMSS.npy` and choosing the latest timestamped `runtime_frames/YYYYMMDD_HHMMSS/` directory earlier than the TAC file timestamp
+
+Across all 107 currently processable demos:
+
+- `manifest["sensor_paths"]` matched `aligned_manifest["sources"]` for FT and Xense paths.
+- No duplicate external FT/TAC paths were observed.
+- Every TAC file had a selectable earlier runtime config directory containing both `runtime_OG000544` and `runtime_OG001009`.
+
+### Self-contained bundle feasibility
+
+The sampled demos can form self-contained bundles with this layout:
+
+```text
+demo_xxx_bundle/
+  archive_manifest.json
+  demo/
+  runtime_frames/
+    data_FT_*.npy.zst
+    data_TAC_*.npy.zst
+    runtime_config/
+      runtime_OG000544
+      runtime_OG001009
+```
+
+The bundle must record the original selected runtime config timestamp directory in archive metadata. The ZIP layout normalizes the files to `runtime_frames/runtime_config/`, but restore must write them back to the selected original directory, for example `runtime_frames/20260605_163106/`.
+
+### File types and special filesystem objects
+
+Observed file type summary:
+
+- `runtime_sessions/demos/demo_20260601_194946`: 11 regular files, 2 directories, 0 symlinks, 0 other special files
+- `runtime_sessions/demos/demo_20260602_094855`: 11 regular files, 2 directories, 0 symlinks, 0 other special files
+- `runtime_sessions/demos/demo_20260605_165503`: 11 regular files, 2 directories, 0 symlinks, 0 other special files
+- `runtime_frames/`: 276 regular files, 29 directories, 0 symlinks, 0 other special files
+- sampled late TAC runtime config directories: regular config files only, no symlinks or special files
+
+This supports using ZIP for single-file packaging and path preservation for the currently observed dataset. Archive code should still reject or explicitly report future symlinks, device files, sockets, FIFOs, or permission/owner semantics that cannot be represented by the chosen ZIP policy.
+
+### Naming collisions and shared resources
+
+No duplicate external FT/TAC paths were observed across the 107 processable demos.
+
+The normalized bundle path `runtime_frames/runtime_config/` would collide if more than one TAC runtime config directory were included in the same demo bundle. Current design includes exactly one selected runtime config directory per demo, so no collision was observed. The external archive metadata must preserve the original selected timestamp directory to make restore deterministic.
+
+### Archive validation sufficiency
+
+The established validation policy is sufficient for the observed data:
+
+- `.npy.zst`: `zstd -t` validates the compressed external FT/TAC files.
+- rosbag/MCAP: successful `ros2 bag convert`, non-empty `rosbag_0.mcap`, and existing `metadata.yaml` are sufficient for archive construction. Full message deserialization and reverse conversion are intentionally out of scope.
+- ZIP: successful creation, non-empty ZIP, and successful external `demo_xxx.archive.json` publication are sufficient for archive state `archived`. Optional ZIP SHA-256 can be computed before long-term storage or transfer.
+
+No raw demo files need to be modified for archive state.
 
 ## ZMQ verification
 

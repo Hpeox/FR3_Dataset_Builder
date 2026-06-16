@@ -32,9 +32,9 @@ DATASETS: dict[str, tuple[str, tuple[Any, ...]]] = {
     "/observations/depth/side": ("uint16", ("T", 480, 640)),
     "/observations/depth/wrist": ("uint16", ("T", 2, 480, 640)),
     "/observations/tactile_images/rgb": ("uint8", ("T", 2, 700, 400, 3)),
-    "/observations/tactile/force": ("float64", ("T", 2, 35, 20, 3)),
-    "/observations/tactile/force_norm": ("float64", ("T", 2, 35, 20, 3)),
-    "/observations/tactile/force_resultant": ("float64", ("T", 2, 6)),
+    "/observations/tactile/force": ("float32", ("T", 2, 35, 20, 3)),
+    "/observations/tactile/force_norm": ("float32", ("T", 2, 35, 20, 3)),
+    "/observations/tactile/force_resultant": ("float32", ("T", 2, 6)),
 }
 
 REQUIRED_ATTRS = (

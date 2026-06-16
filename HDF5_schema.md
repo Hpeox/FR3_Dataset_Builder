@@ -177,7 +177,7 @@ demo_xxx.h5
     └── tactile
         ├── force
         │   shape: [T, 2, 35, 20, 3]
-        │   dtype: float64
+        │   dtype: float32
         │   chunks: [8, 2, 35, 20, 3]
         │   compression: zstd(level=12) + shuffle
         │   attrs:
@@ -185,7 +185,7 @@ demo_xxx.h5
         │
         ├── force_norm
         │   shape: [T, 2, 35, 20, 3]
-        │   dtype: float64
+        │   dtype: float32
         │   chunks: [8, 2, 35, 20, 3]
         │   compression: zstd(level=12) + shuffle
         │   attrs:
@@ -193,7 +193,7 @@ demo_xxx.h5
         │
         └── force_resultant
             shape: [T, 2, 6]
-            dtype: float64
+            dtype: float32
             chunks: [K, 2, 6]
             compression: zstd(level=12) + shuffle
             attrs:

@@ -168,6 +168,168 @@ rec1 = frame[f"{sensor_id_1}_rec"]
 
 For the current dataset, stack tactile sensor dimension as `[left, right] == [OG000544, OG001009]`.
 
+Xense SDK 2.0 stores `force`, `force_norm`, and `force_resultant` arrays as `float32`.
+Older saved files may contain `float64` arrays. The HDF5 builder should accept either
+raw dtype for these tactile force fields and normalize the HDF5 datasets under
+`/observations/tactile/*` to `float32`.
+
+## Archive resource discovery
+
+Cold-storage archive creation should reuse the same authoritative resource discovery rules as the HDF5 builder:
+
+1. Start from `runtime_sessions/demos/demo_xxx/manifest.json`.
+2. Require `manifest.status == "done"` and `aligned/aligned_manifest.json` with `status == "done"` for the current archiveable set.
+3. Resolve `manifest["npz"][...]` and `manifest["rosbag_uri"]` relative to the demo directory.
+4. Resolve `manifest["sensor_paths"]["ft300"]` and `manifest["sensor_paths"]["xense"]` relative to the repository root.
+5. Cross-check `manifest["sensor_paths"]["ft300"]` against `aligned_manifest["sources"]["ft300s_saved_file"]`.
+6. Cross-check `manifest["sensor_paths"]["xense"]` against `aligned_manifest["sources"]["xense_saved_file"]`.
+7. Cross-check `manifest["rosbag_uri"]` against `aligned_manifest["sources"]["rosbag_uri"]`.
+
+If any required path is missing or any cross-check mismatches, archive creation should fail that demo. It should not infer replacement paths from file names.
+
+## Archive runtime config discovery
+
+TAC runtime config files are not listed directly in the sampled demo manifests. They live in timestamped directories under `runtime_frames/`, for example:
+
+```text
+runtime_frames/20260605_163106/runtime_OG000544
+runtime_frames/20260605_163106/runtime_OG001009
+```
+
+For each archived TAC external file:
+
+1. Resolve the TAC `.npy` from `manifest["sensor_paths"]["xense"]`.
+2. Parse the timestamp from the TAC file name, for example `data_TAC_20260605_165503.npy` -> `20260605_165503`.
+3. List timestamp-named `runtime_frames/YYYYMMDD_HHMMSS/` directories.
+4. Select the latest directory whose timestamp is strictly earlier than the TAC `.npy` timestamp.
+5. Include the selected directory's `runtime_OG000544` and `runtime_OG001009` files.
+
+The bundle should store these files under:
+
+```text
+runtime_frames/runtime_config/runtime_OG000544
+runtime_frames/runtime_config/runtime_OG001009
+```
+
+The external archive metadata should record the original selected timestamp directory so restore can write the files back to:
+
+```text
+runtime_frames/<selected_config_timestamp>/runtime_OG000544
+runtime_frames/<selected_config_timestamp>/runtime_OG001009
+```
+
+## Archive bundle path construction
+
+Each demo archive should publish:
+
+```text
+archives/demo_xxx.zip
+archives/demo_xxx.archive.json
+```
+
+The ZIP should contain one logical bundle root:
+
+```text
+demo_xxx_bundle/
+```
+
+Inside that root:
+
+- `archive_manifest.json` is generated archive metadata.
+- `demo/` is the complete raw `runtime_sessions/demos/demo_xxx/` directory.
+- `runtime_frames/data_FT_*.npy.zst` is the compressed external FT file referenced by the manifest.
+- `runtime_frames/data_TAC_*.npy.zst` is the compressed external TAC file referenced by the manifest.
+- `runtime_frames/runtime_config/` contains the selected TAC runtime config files.
+
+Bundle paths should be deterministic and should not depend on the shell working directory.
+
+## Archive compression selection
+
+Use the established compression policy:
+
+- External `.npy` files: compress with `zstd -T0 -19`, output `.npy.zst`.
+- Rosbags: use `ros2 bag convert` to MCAP with internal zstd compression, preset `slow`, and chunk size `64 MB`.
+- Outer ZIP: one ZIP per demo, ZIP64 enabled.
+
+ZIP entry policy:
+
+- Store `.zst`, `.mcap`, `.npz`, and other already-compressed files.
+- Deflate small text files such as `.json`, `.yaml`, `.md`, and other metadata.
+- ZIP is for single-file packaging and path preservation, not the main compression layer.
+
+ZIP remains acceptable only while inspection confirms the archived data has no required Unix owner, permission, symlink, or special-file semantics.
+
+## Archive metadata and lifecycle
+
+Do not write archive state into the raw demo's `manifest.json`.
+
+Each published archive must have an external sidecar:
+
+```text
+archives/demo_xxx.archive.json
+```
+
+It should contain at least:
+
+- `demo_id`
+- `archive_format`
+- `archive_path`
+- `created_at`
+- `source_root`
+- `restore_root`
+- `zip_size`
+- optional `zip_sha256`
+- compression parameters
+- validation results
+- selected external source paths
+- selected TAC runtime config timestamp directory
+- `raw_released`
+
+The persistent lifecycle is:
+
+- `not_archived`: no successfully published ZIP plus external archive JSON.
+- `archived`: successfully published and validated ZIP plus external archive JSON.
+- `raw_released`: archive JSON records that the original raw resources were released.
+
+If archive construction fails or is interrupted before both final artifacts are successfully published, treat the demo as `not_archived` and rebuild it on the next run.
+
+## Archive validation
+
+For `.npy.zst`:
+
+```text
+zstd -t
+```
+
+For converted rosbag/MCAP:
+
+- require successful `ros2 bag convert` return code
+- require `rosbag_0.mcap` to exist and be non-empty
+- require `metadata.yaml` to exist
+- do not deserialize every message
+- do not perform reverse conversion
+- do not require checksum equivalence with the original bag
+
+For the final archive:
+
+- require successful ZIP creation
+- require the ZIP to exist and be non-empty
+- require the external `demo_xxx.archive.json` to be written successfully
+- optionally compute ZIP SHA-256 before long-term storage or transfer
+
+## Archive restore destinations
+
+Restore behavior should be fixed and deterministic:
+
+- Restore bundle `demo/` to `runtime_sessions/demos/demo_xxx/`.
+- Decompress and restore `runtime_frames/data_FT_*.npy.zst` to the original `runtime_frames/data_FT_*.npy`.
+- Decompress and restore `runtime_frames/data_TAC_*.npy.zst` to the original `runtime_frames/data_TAC_*.npy`.
+- Restore `runtime_frames/runtime_config/runtime_OG000544` and `runtime_frames/runtime_config/runtime_OG001009` to the selected original timestamp directory recorded in archive metadata.
+- Do not overwrite existing files by default.
+- Allow overwriting only with an explicit force option.
+
+Do not design arbitrary restore roots or a restore planner.
+
 ## RealSense rosbag
 
 Path source:

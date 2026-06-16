@@ -191,13 +191,13 @@ def write_tactile(h5: h5py.File, ctx: DemoBuildContext) -> None:
     del tactile_rgb
 
     force = xense.force()
-    create_dataset(h5, "/observations/tactile/force", force, (t, 2, 35, 20, 3), np.dtype("float64"), (c, 2, 35, 20, 3))
+    create_dataset(h5, "/observations/tactile/force", force, (t, 2, 35, 20, 3), np.dtype("float32"), (c, 2, 35, 20, 3))
     h5["/observations/tactile/force"].attrs["sensor_names"] = np.asarray(["left", "right"], dtype=h5py.string_dtype("utf-8"))
     del force
     force_norm = xense.force_norm()
-    create_dataset(h5, "/observations/tactile/force_norm", force_norm, (t, 2, 35, 20, 3), np.dtype("float64"), (c, 2, 35, 20, 3))
+    create_dataset(h5, "/observations/tactile/force_norm", force_norm, (t, 2, 35, 20, 3), np.dtype("float32"), (c, 2, 35, 20, 3))
     h5["/observations/tactile/force_norm"].attrs["sensor_names"] = np.asarray(["left", "right"], dtype=h5py.string_dtype("utf-8"))
     del force_norm
     force_resultant = xense.force_resultant()
-    create_dataset(h5, "/observations/tactile/force_resultant", force_resultant, (t, 2, 6), np.dtype("float64"), (k, 2, 6))
+    create_dataset(h5, "/observations/tactile/force_resultant", force_resultant, (t, 2, 6), np.dtype("float32"), (k, 2, 6))
     h5["/observations/tactile/force_resultant"].attrs["sensor_names"] = np.asarray(["left", "right"], dtype=h5py.string_dtype("utf-8"))

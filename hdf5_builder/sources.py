@@ -139,13 +139,13 @@ class XenseSource:
         return self._stack_pair("rec", TACTILE_RGB_SHAPE, np.dtype("uint8"))
 
     def force(self) -> np.ndarray:
-        return self._stack_pair("force", TACTILE_FORCE_SHAPE, np.dtype("float64"))
+        return self._stack_pair("force", TACTILE_FORCE_SHAPE, np.dtype("float32"))
 
     def force_norm(self) -> np.ndarray:
-        return self._stack_pair("force_norm", TACTILE_FORCE_SHAPE, np.dtype("float64"))
+        return self._stack_pair("force_norm", TACTILE_FORCE_SHAPE, np.dtype("float32"))
 
     def force_resultant(self) -> np.ndarray:
-        return self._stack_pair("force_resultant", TACTILE_RESULTANT_SHAPE, np.dtype("float64"))
+        return self._stack_pair("force_resultant", TACTILE_RESULTANT_SHAPE, np.dtype("float32"))
 
     def _stack_pair(self, suffix: str, item_shape: tuple[int, ...], dtype: np.dtype[Any]) -> np.ndarray:
         result = np.empty((self.ctx.total_steps, 2, *item_shape), dtype=dtype)
@@ -161,12 +161,11 @@ class XenseSource:
                 key = f"{sensor_id}_{suffix}"
                 if key not in frame:
                     raise RuntimeError(f"Xense frame {frame_key} missing field {key}")
-                result[out_row, sensor_axis] = require_array(
-                    f"Xense {frame_key} {key}",
-                    frame[key],
-                    item_shape,
-                    dtype,
-                )
+                name = f"Xense {frame_key} {key}"
+                if dtype == np.dtype("uint8"):
+                    result[out_row, sensor_axis] = require_array(name, frame[key], item_shape, dtype)
+                else:
+                    result[out_row, sensor_axis] = require_cast_array(name, frame[key], item_shape, dtype)
         return result
 
 
