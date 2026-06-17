@@ -16,7 +16,6 @@ from hdf5_builder.context import (
     DemoBuildContext,
     read_json,
     required_image_topics,
-    require_allowed_output_path,
     resolve_demo_path,
     resolve_repo_path,
 )
@@ -50,8 +49,6 @@ def main() -> int:
     demos_root = resolve_demos_root(args.demos_root, repo_root)
     output_dir = resolve_output_dir(args.output_dir)
     batch_report_path = (args.batch_report.resolve() if args.batch_report else output_dir / "batch_build_report.json")
-    require_allowed_output_path(output_dir, "--output-dir")
-    require_allowed_output_path(batch_report_path, "--batch-report")
     if not args.dry_run:
         output_dir.mkdir(parents=True, exist_ok=True)
         batch_report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -206,9 +203,6 @@ def dry_run_check_demo(manifest_path: Path, output_path: Path, report_path: Path
     manifest = read_json(manifest_path)
     aligned_manifest = read_json(aligned_dir / "aligned_manifest.json")
     read_json(aligned_dir / "alignment_config.json")
-    require_allowed_output_path(output_path, "dry-run output")
-    require_allowed_output_path(output_path.with_suffix(output_path.suffix + ".tmp"), "dry-run temporary output")
-    require_allowed_output_path(report_path, "dry-run report")
 
     sources = aligned_manifest.get("sources") or {}
     if dict(manifest.get("npz") or {}) != dict(sources.get("npz") or {}):

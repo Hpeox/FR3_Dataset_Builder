@@ -16,7 +16,6 @@ from .report import BuildReport
 DATASET_BUILDER_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REPO_ROOT = DATASET_BUILDER_ROOT.parent
 EXTERNAL_DATASET_ROOT = Path("/data/external/DATASET")
-ALLOWED_OUTPUT_ROOTS = (EXTERNAL_DATASET_ROOT, DATASET_BUILDER_ROOT)
 REQUIRED_NPZ = ("ft300", "xense", "realsense", "zmq")
 REQUIRED_SENSOR_PATHS = ("ft300", "xense")
 REQUIRED_STREAMS = (
@@ -40,22 +39,6 @@ def read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise RuntimeError(f"required JSON file is missing: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def is_relative_to(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except ValueError:
-        return False
-
-
-def require_allowed_output_path(path: Path, label: str) -> None:
-    resolved = path.resolve()
-    if any(is_relative_to(resolved, root) for root in ALLOWED_OUTPUT_ROOTS):
-        return
-    roots = ", ".join(root.as_posix() for root in ALLOWED_OUTPUT_ROOTS)
-    raise RuntimeError(f"{label} must be under one of: {roots}; got {resolved}")
 
 
 def resolve_demo_path(demo_dir: Path, value: str | None, label: str) -> Path:
@@ -133,9 +116,6 @@ class DemoBuildContext:
         else:
             self.report_path = self.report_path.resolve()
         self.tmp_output_path = self.output_path.with_suffix(self.output_path.suffix + ".tmp")
-        require_allowed_output_path(self.output_path, "--output")
-        require_allowed_output_path(self.tmp_output_path, "temporary output")
-        require_allowed_output_path(self.report_path, "--report")
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.report_path.parent.mkdir(parents=True, exist_ok=True)
         self._check_free_space()
