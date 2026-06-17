@@ -117,11 +117,13 @@ def test_cli_defaults_match_single_and_batch_manifest_policy(monkeypatch) -> Non
     single = build_archive_cli.parse_args()
     assert not hasattr(single, "update_manifest")
     assert single.keep_staging is False
+    assert single.dry_run is False
     assert single.archive_dir.as_posix().endswith("/DatasetBuilder/outputs")
 
     monkeypatch.setattr("sys.argv", ["build_archive_batch.py"])
     batch = build_archive_batch_cli.parse_args()
     assert batch.update_manifest is True
+    assert batch.dry_run is False
     assert batch.archive_dir.as_posix() == "/data/external/DATASET/Archived"
 
     monkeypatch.setattr("sys.argv", ["build_archive_batch.py", "--no-update-manifest"])
@@ -189,6 +191,80 @@ def test_batch_cli_output_matches_hdf5_style(tmp_path: Path, monkeypatch, capsys
         "candidate_count": 1,
         "archive_dir": archive_dir.as_posix(),
         "update_manifest": False,
+        "dry_run": False,
     }
     assert lines[1].startswith("demo_20260605_165503: succeeded archive=")
-    assert json.loads(lines[-1]) == {"processed": 1, "succeeded": 1, "failed": 0, "skipped": 0}
+    assert json.loads(lines[-1]) == {
+        "dry_run": False,
+        "checked": 0,
+        "processed": 1,
+        "succeeded": 1,
+        "failed": 0,
+        "skipped": 0,
+    }
+
+
+def test_single_cli_dry_run_does_not_write_archive(tmp_path: Path, monkeypatch, capsys) -> None:
+    repo = tmp_path / "repo"
+    manifest = make_demo(repo)
+    archive_dir = tmp_path / "outputs"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "build_archive.py",
+            "--dry-run",
+            "--manifest",
+            manifest.as_posix(),
+            "--repo-root",
+            repo.as_posix(),
+            "--archive-dir",
+            archive_dir.as_posix(),
+        ],
+    )
+
+    assert build_archive_cli.main() == 0
+
+    out = capsys.readouterr().out.strip()
+    assert out.startswith("demo_20260605_165503: dry-run ok target_conflict=False archive=")
+    assert not archive_dir.exists()
+    assert json.loads(manifest.read_text(encoding="utf-8")).get("archieved") is None
+
+
+def test_batch_cli_dry_run_checks_archive_without_writes(tmp_path: Path, monkeypatch, capsys) -> None:
+    repo = tmp_path / "repo"
+    manifest = make_demo(repo)
+    archive_dir = tmp_path / "Archived"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "build_archive_batch.py",
+            "--dry-run",
+            "--demos-root",
+            manifest.parent.parent.as_posix(),
+            "--repo-root",
+            repo.as_posix(),
+            "--archive-dir",
+            archive_dir.as_posix(),
+        ],
+    )
+
+    assert build_archive_batch_cli.main() == 0
+
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert json.loads(lines[0]) == {
+        "candidate_count": 1,
+        "archive_dir": archive_dir.as_posix(),
+        "update_manifest": True,
+        "dry_run": True,
+    }
+    assert lines[1].startswith("demo_20260605_165503: dry-run ok target_conflict=False archive=")
+    assert json.loads(lines[-1]) == {
+        "dry_run": True,
+        "checked": 1,
+        "processed": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "skipped": 0,
+    }
+    assert not archive_dir.exists()
+    assert json.loads(manifest.read_text(encoding="utf-8")).get("archieved") is None

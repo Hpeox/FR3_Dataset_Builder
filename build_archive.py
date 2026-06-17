@@ -8,6 +8,7 @@ from pathlib import Path
 
 from archive_builder.builder import build_archive
 from archive_builder.context import DEFAULT_REPO_ROOT, SINGLE_ARCHIVE_ROOT, ArchiveContext
+from archive_builder.dry_run import dry_run_check_archive
 
 
 def parse_args() -> argparse.Namespace:
@@ -17,6 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--archive-dir", type=Path, default=SINGLE_ARCHIVE_ROOT)
     parser.add_argument("--overwrite", action="store_true", help="replace existing archive artifacts")
     parser.add_argument("--keep-staging", action="store_true", help="keep per-demo staging directory after completion")
+    parser.add_argument("--dry-run", action="store_true", help="validate archive inputs and paths without writing artifacts")
     return parser.parse_args()
 
 
@@ -27,6 +29,14 @@ def main() -> int:
         archive_dir=args.archive_dir,
         repo_root=args.repo_root,
     )
+    if args.dry_run:
+        payload = dry_run_check_archive(ctx, overwrite=args.overwrite)
+        print(
+            f"{ctx.demo_id}: dry-run ok target_conflict={payload['target_conflict']} "
+            f"archive={payload['archive_path']}",
+            flush=True,
+        )
+        return 0
     payload = build_archive(
         ctx,
         overwrite=args.overwrite,

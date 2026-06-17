@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import numpy as np
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,10 @@ from hdf5_builder.context import (
     EXTERNAL_DATASET_ROOT,
     DemoBuildContext,
     read_json,
+    required_image_topics,
     require_allowed_output_path,
+    resolve_demo_path,
+    resolve_repo_path,
 )
 from hdf5_builder.manifest_update import mark_h5_generated
 from hdf5_builder.writer import write_hdf5
@@ -36,6 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-free-gb", type=float, default=20.0)
     parser.add_argument("--no-update-manifest", action="store_true")
     parser.add_argument("--batch-report", type=Path, default=None)
+    parser.add_argument("--dry-run", action="store_true", help="validate inputs and paths without writing outputs or manifests")
     return parser.parse_args()
 
 
@@ -47,16 +52,19 @@ def main() -> int:
     batch_report_path = (args.batch_report.resolve() if args.batch_report else output_dir / "batch_build_report.json")
     require_allowed_output_path(output_dir, "--output-dir")
     require_allowed_output_path(batch_report_path, "--batch-report")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    batch_report_path.parent.mkdir(parents=True, exist_ok=True)
+    if not args.dry_run:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        batch_report_path.parent.mkdir(parents=True, exist_ok=True)
 
     summary = {
+        "dry_run": bool(args.dry_run),
         "demos_root": demos_root.as_posix(),
         "output_dir": output_dir.as_posix(),
         "processed": 0,
         "succeeded": 0,
         "failed": 0,
         "skipped": 0,
+        "checked": 0,
         "results": [],
     }
 
@@ -77,7 +85,8 @@ def main() -> int:
             summary["skipped"] += 1
             summary["results"].append(record)
             print_status(record)
-            write_batch_report(batch_report_path, summary)
+            if not args.dry_run:
+                write_batch_report(batch_report_path, summary)
             continue
 
         processable_seen += 1
@@ -86,6 +95,25 @@ def main() -> int:
             break
 
         manifest = read_json(manifest_path)
+        if args.dry_run:
+            try:
+                dry_run_payload = dry_run_check_demo(manifest_path, output_path, report_path, repo_root)
+                record = {
+                    **base_record,
+                    "status": "dry_run_ok",
+                    "would_skip_existing": bool(
+                        args.skip_existing and output_path.exists() and bool(manifest.get("h5_generated"))
+                    ),
+                    **dry_run_payload,
+                }
+                summary["checked"] += 1
+            except Exception as exc:
+                record = {**base_record, "status": "failed", "error": str(exc)}
+                summary["failed"] += 1
+            summary["results"].append(record)
+            print_status(record)
+            continue
+
         if args.skip_existing and output_path.exists() and bool(manifest.get("h5_generated")):
             record = {**base_record, "status": "skipped", "reason": "existing_h5_and_manifest_marked"}
             summary["skipped"] += 1
@@ -122,10 +150,17 @@ def main() -> int:
             summary["failed"] += 1
         summary["results"].append(record)
         print_status(record)
-        write_batch_report(batch_report_path, summary)
+        if not args.dry_run:
+            write_batch_report(batch_report_path, summary)
 
-    write_batch_report(batch_report_path, summary)
-    print(json.dumps({key: summary[key] for key in ("processed", "succeeded", "failed", "skipped")}, ensure_ascii=True))
+    if not args.dry_run:
+        write_batch_report(batch_report_path, summary)
+    print(
+        json.dumps(
+            {key: summary[key] for key in ("dry_run", "checked", "processed", "succeeded", "failed", "skipped")},
+            ensure_ascii=True,
+        )
+    )
     return 1 if summary["failed"] else 0
 
 
@@ -165,6 +200,66 @@ def skip_reason_for_demo(manifest_path: Path) -> str | None:
     return None
 
 
+def dry_run_check_demo(manifest_path: Path, output_path: Path, report_path: Path, repo_root: Path) -> dict[str, Any]:
+    demo_dir = manifest_path.parent
+    aligned_dir = demo_dir / "aligned"
+    manifest = read_json(manifest_path)
+    aligned_manifest = read_json(aligned_dir / "aligned_manifest.json")
+    read_json(aligned_dir / "alignment_config.json")
+    require_allowed_output_path(output_path, "dry-run output")
+    require_allowed_output_path(output_path.with_suffix(output_path.suffix + ".tmp"), "dry-run temporary output")
+    require_allowed_output_path(report_path, "dry-run report")
+
+    sources = aligned_manifest.get("sources") or {}
+    if dict(manifest.get("npz") or {}) != dict(sources.get("npz") or {}):
+        raise RuntimeError("manifest npz paths do not match aligned_manifest.sources.npz")
+    sensor_paths = manifest.get("sensor_paths") or {}
+    if sensor_paths.get("ft300") != sources.get("ft300s_saved_file"):
+        raise RuntimeError("manifest sensor_paths.ft300 does not match aligned_manifest source")
+    if sensor_paths.get("xense") != sources.get("xense_saved_file"):
+        raise RuntimeError("manifest sensor_paths.xense does not match aligned_manifest source")
+    if manifest.get("rosbag_uri") != sources.get("rosbag_uri"):
+        raise RuntimeError("manifest rosbag_uri does not match aligned_manifest source")
+
+    manifest_npz = manifest.get("npz") or {}
+    npz_paths = {
+        key: resolve_demo_path(demo_dir, manifest_npz.get(key), f"npz.{key}")
+        for key in ("ft300", "xense", "realsense", "zmq")
+    }
+    sensor_resolved = {
+        key: resolve_repo_path(repo_root, sensor_paths.get(key), f"sensor_paths.{key}")
+        for key in ("ft300", "xense")
+    }
+    rosbag_dir = resolve_demo_path(demo_dir, manifest.get("rosbag_uri"), "rosbag_uri")
+    for path in (rosbag_dir / "metadata.yaml", rosbag_dir / "rosbag_0.mcap"):
+        if not path.exists():
+            raise RuntimeError(f"missing rosbag file: {path}")
+    topics = required_image_topics(manifest)
+    if not topics:
+        raise RuntimeError("manifest does not define required RealSense image topics")
+
+    aligned_index_path = aligned_dir / "aligned_index.npz"
+    if not aligned_index_path.exists():
+        raise RuntimeError(f"missing aligned_index.npz: {aligned_index_path}")
+    with np.load(aligned_index_path, allow_pickle=False) as aligned_index:
+        if "t_ns" not in aligned_index:
+            raise RuntimeError("aligned_index.npz missing t_ns")
+        sample_count = int(len(aligned_index["t_ns"]))
+    if sample_count != int(aligned_manifest.get("sample_count")):
+        raise RuntimeError(
+            f"sample_count mismatch: aligned_manifest={aligned_manifest.get('sample_count')}, "
+            f"aligned_index={sample_count}"
+        )
+
+    return {
+        "sample_count": sample_count,
+        "npz_paths": {key: path.as_posix() for key, path in npz_paths.items()},
+        "sensor_paths": {key: path.as_posix() for key, path in sensor_resolved.items()},
+        "rosbag_uri": rosbag_dir.as_posix(),
+        "required_topic_count": len(topics),
+    }
+
+
 def write_batch_report(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
 
@@ -174,6 +269,12 @@ def print_status(record: dict[str, Any]) -> None:
         print(
             f"{record['demo_id']}: succeeded rows={record.get('exported_rows')} "
             f"warnings={record.get('warning_count')} output={record['output_path']}",
+            flush=True,
+        )
+    elif record["status"] == "dry_run_ok":
+        print(
+            f"{record['demo_id']}: dry-run ok samples={record.get('sample_count')} "
+            f"would_skip_existing={record.get('would_skip_existing')}",
             flush=True,
         )
     elif record["status"] == "failed":
