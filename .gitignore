@@ -11,3 +11,5 @@ outputs/
 
 .pytest_cache/
 runtime_sessions/
+
+*.log
