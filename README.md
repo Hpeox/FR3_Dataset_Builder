@@ -21,6 +21,8 @@ linked documents below. This README is the operational entry point.
 - `build_archive.py`: build one cold-storage ZIP archive from one raw demo.
 - `build_archive_batch.py`: scan a demos directory and build archives in batch.
 - `restore_archive.py`: restore a cold-storage archive into a raw dataset tree.
+- `cleanup_raw_demos.py`: interactively delete raw demos and owned
+  `runtime_frames` resources after archive/HDF5 publication or rejection.
 - `archive_builder/`: archive discovery, compression, rosbag conversion,
   archive metadata, ZIP writing, dry-run checks, and restore logic.
 - `tools/`: ad hoc inspection and validation tools.
@@ -216,6 +218,80 @@ python3 DatasetBuilder/restore_archive.py \
 
 Use `--restore-root <path>` to override the restore destination. Use `--force`
 only when existing restored files may be overwritten.
+
+## Raw Demo Cleanup
+
+`cleanup_raw_demos.py` is an interactive cleanup tool for removing raw demo
+directories and their owned external `runtime_frames` files. It never edits raw
+manifests or archive metadata.
+
+Completed demos require explicit archive and HDF5 roots:
+
+```bash
+python3 DatasetBuilder/cleanup_raw_demos.py \
+  --mode completed \
+  --demos-root runtime_sessions/demos \
+  --runtime-frames-root runtime_frames \
+  --archives-root /data/external/DATASET/Archived \
+  --hdf5-root /data/external/DATASET
+```
+
+Rejected demos do not require archive or HDF5 roots:
+
+```bash
+python3 DatasetBuilder/cleanup_raw_demos.py \
+  --mode discarded \
+  --demos-root runtime_sessions/demos \
+  --runtime-frames-root runtime_frames
+
+python3 DatasetBuilder/cleanup_raw_demos.py \
+  --mode failed \
+  --demos-root runtime_sessions/demos \
+  --runtime-frames-root runtime_frames
+```
+
+Use `--dry-run` to show the same per-demo deletion plans without creating the
+cleanup flag or deleting files.
+
+Cleanup modes:
+
+- `completed`: selects demos with `manifest.status == "done"` and
+  `aligned/aligned_manifest.json.status == "done"`, then requires non-empty
+  `<demo_id>.zip`, `<demo_id>.archive.json`, and `<demo_id>.h5`. The archive
+  metadata `zip_size` must match the actual ZIP file size. This is a lightweight
+  completion check and does not open ZIPs, compute SHA-256, read HDF5 payloads,
+  or repeat builder validation.
+- `discarded`: selects demos with `manifest.status == "discarded"`.
+- `failed`: selects demos with `manifest.status == "failed"`.
+
+External resource policy:
+
+- FT/TAC `.npy` files come only from `manifest["sensor_paths"]` and are treated
+  as one-demo-owned resources.
+- Runtime config directories are shared resources. For completed demos, the
+  candidate cleanup target is read from archive metadata
+  `source_paths.tac_runtime_config_dir`. For failed demos, the tool derives the
+  config directory from the TAC file timestamp using the archive builder's
+  existing timestamp rule. Discarded demos do not reference runtime config.
+- At startup, the tool scans existing manifests and builds a reverse mapping
+  from runtime config directories to referencing demos. A runtime config
+  directory is deleted only when the current candidate is the last remaining
+  referencing demo.
+
+Safety and failure behavior:
+
+- All paths are resolved and must stay inside the configured demo or
+  `runtime_frames` roots. The tool refuses to delete either root itself,
+  symlinks, and special files.
+- Each candidate is shown with exact paths, runtime config action, estimated
+  size, and a `y/N/q` prompt.
+- On confirmed deletion, the tool creates
+  `.raw_cleanup_in_progress` in the demo directory, deletes external resources
+  first, then deletes the demo contents, manifest, flag, and empty demo
+  directory.
+- Any deletion failure stops the run immediately and prints a partial-failure
+  summary. The cleanup flag is intentionally left in place for manual
+  inspection.
 
 ## Outputs and Reports
 
