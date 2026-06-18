@@ -47,7 +47,10 @@ A demo is processable only when both conditions are true:
 The builders also cross-check raw inputs recorded in `manifest.json` against
 `aligned/aligned_manifest.json.sources`. Demo-owned NPZ and rosbag paths are
 resolved relative to the demo directory. External `sensor_paths` are resolved
-relative to `--repo-root`, which defaults to the parent of `DatasetBuilder`.
+relative to `--runtime-root`, which is the runtime data root containing
+`runtime_sessions/` and `runtime_frames/`. It defaults to the parent of
+`DatasetBuilder` for the repository-local MainController layout. The previous
+name `--repo-root` remains available as a compatibility alias.
 
 ## HDF5 Workflows
 
@@ -82,7 +85,8 @@ Useful options:
 - `--overwrite`: replace an existing HDF5 output and report.
 - `--min-free-gb <gb>`: require free space on the output filesystem before
   writing.
-- `--repo-root <path>`: override the root used for `sensor_paths`.
+- `--runtime-root <path>`: set the runtime data root used for `sensor_paths`;
+  `--repo-root` is a compatibility alias.
 
 ### Batch
 
@@ -119,9 +123,10 @@ python3 DatasetBuilder/build_hdf5_batch.py --no-update-manifest
 python3 DatasetBuilder/build_hdf5_batch.py \
   --output-dir /data/external/DATASET
 
-# Use a different repository root for external sensor_paths.
+# Read MainController data stored under an external runtime root.
 python3 DatasetBuilder/build_hdf5_batch.py \
-  --repo-root /path/to/gello-deploy
+  --demos-root /data/external/runtime/runtime_sessions/demos \
+  --runtime-root /data/external/runtime
 ```
 
 HDF5 output and report paths may be any writable path. The defaults remain
@@ -153,8 +158,9 @@ Single-archive mode does not update the raw demo manifest.
 Useful options:
 
 - `--archive-dir <path>`: choose the output directory.
-- `--repo-root <path>`: override the root used for external `sensor_paths`
-  and runtime config discovery.
+- `--runtime-root <path>`: set the runtime data root used for external
+  `sensor_paths` and runtime config discovery; `--repo-root` is a compatibility
+  alias.
 - `--overwrite`: replace existing archive artifacts.
 - `--keep-staging`: keep the per-demo staging directory after completion.
 - `--dry-run`: validate inputs and target paths without writing artifacts.
@@ -195,9 +201,10 @@ python3 DatasetBuilder/build_archive_batch.py \
 # Leave raw manifests unchanged during batch archive publication.
 python3 DatasetBuilder/build_archive_batch.py --no-update-manifest
 
-# Use a different repository root for external sensor_paths and runtime config.
+# Read MainController data stored under an external runtime root.
 python3 DatasetBuilder/build_archive_batch.py \
-  --repo-root /path/to/gello-deploy
+  --demos-root /data/external/runtime/runtime_sessions/demos \
+  --runtime-root /data/external/runtime
 ```
 
 ### Restore Archive

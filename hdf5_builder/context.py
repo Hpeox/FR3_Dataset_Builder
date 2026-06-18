@@ -53,7 +53,7 @@ def resolve_demo_path(demo_dir: Path, value: str | None, label: str) -> Path:
 
 def resolve_repo_path(repo_root: Path, value: str | None, label: str) -> Path:
     if not value:
-        raise RuntimeError(f"missing required repo-relative path: {label}")
+        raise RuntimeError(f"missing required runtime-root-relative path: {label}")
     path = Path(value)
     resolved = path if path.is_absolute() else repo_root / path
     if not resolved.exists():

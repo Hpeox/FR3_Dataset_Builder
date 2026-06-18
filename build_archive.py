@@ -14,7 +14,14 @@ from archive_builder.dry_run import dry_run_check_archive
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True, help="path to demo manifest.json")
-    parser.add_argument("--repo-root", type=Path, default=DEFAULT_REPO_ROOT)
+    parser.add_argument(
+        "--runtime-root",
+        "--repo-root",
+        dest="runtime_root",
+        type=Path,
+        default=DEFAULT_REPO_ROOT,
+        help="runtime data root containing runtime_sessions and runtime_frames",
+    )
     parser.add_argument("--archive-dir", type=Path, default=SINGLE_ARCHIVE_ROOT)
     parser.add_argument("--overwrite", action="store_true", help="replace existing archive artifacts")
     parser.add_argument("--keep-staging", action="store_true", help="keep per-demo staging directory after completion")
@@ -27,7 +34,7 @@ def main() -> int:
     ctx = ArchiveContext(
         manifest_path=args.manifest,
         archive_dir=args.archive_dir,
-        repo_root=args.repo_root,
+        repo_root=args.runtime_root,
     )
     if args.dry_run:
         payload = dry_run_check_archive(ctx, overwrite=args.overwrite)

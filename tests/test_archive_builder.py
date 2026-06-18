@@ -7,11 +7,45 @@ from pathlib import Path
 
 import build_archive as build_archive_cli
 import build_archive_batch as build_archive_batch_cli
+import build_hdf5 as build_hdf5_cli
+import build_hdf5_batch as build_hdf5_batch_cli
 from archive_builder.builder import build_archive
 from archive_builder.context import ArchiveContext, select_tac_runtime_config
 from archive_builder.restore import restore_archive
 
 from conftest import make_demo, make_fake_commands
+
+
+def test_runtime_root_cli_name_and_repo_root_alias(monkeypatch, tmp_path: Path) -> None:
+    runtime_root = tmp_path / "runtime"
+    manifest = runtime_root / "runtime_sessions" / "demos" / "demo_test" / "manifest.json"
+
+    for module, argv in (
+        (
+            build_hdf5_cli,
+            ["build_hdf5.py", "--manifest", manifest.as_posix(), "--runtime-root", runtime_root.as_posix()],
+        ),
+        (
+            build_archive_cli,
+            ["build_archive.py", "--manifest", manifest.as_posix(), "--runtime-root", runtime_root.as_posix()],
+        ),
+        (
+            build_hdf5_batch_cli,
+            ["build_hdf5_batch.py", "--runtime-root", runtime_root.as_posix()],
+        ),
+        (
+            build_archive_batch_cli,
+            ["build_archive_batch.py", "--runtime-root", runtime_root.as_posix()],
+        ),
+    ):
+        monkeypatch.setattr("sys.argv", argv)
+        assert module.parse_args().runtime_root == runtime_root
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["build_archive.py", "--manifest", manifest.as_posix(), "--repo-root", runtime_root.as_posix()],
+    )
+    assert build_archive_cli.parse_args().runtime_root == runtime_root
 
 
 def test_select_tac_runtime_config_uses_latest_earlier_directory(tmp_path: Path) -> None:

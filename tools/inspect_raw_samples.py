@@ -172,23 +172,30 @@ def rel(path: Path | None) -> str | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--repo-root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--runtime-root",
+        "--repo-root",
+        dest="runtime_root",
+        type=Path,
+        default=Path.cwd(),
+        help="runtime data root containing runtime_sessions and runtime_frames",
+    )
     parser.add_argument("--limit", type=int, default=3)
     parser.add_argument("--demo", action="append", default=[])
     args = parser.parse_args()
 
-    repo_root = args.repo_root.resolve()
-    demos_root = repo_root / "runtime_sessions" / "demos"
+    runtime_root = args.runtime_root.resolve()
+    demos_root = runtime_root / "runtime_sessions" / "demos"
     if args.demo:
         demos = [(demos_root / name if not Path(name).is_absolute() else Path(name)) for name in args.demo]
     else:
         demos = discover_processable_demos(demos_root)[: args.limit]
 
     payload = {
-        "repo_root": repo_root.as_posix(),
+        "runtime_root": runtime_root.as_posix(),
         "processability_rule": "manifest.status == 'done' and aligned/aligned_manifest.json status == 'done'",
         "selected_demos": [demo.name for demo in demos],
-        "demos": [inspect_demo(repo_root, demo) for demo in demos],
+        "demos": [inspect_demo(runtime_root, demo) for demo in demos],
     }
     print(json.dumps(payload, indent=2, ensure_ascii=True))
     return 0

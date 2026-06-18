@@ -17,7 +17,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demos-root", type=Path, default=Path("runtime_sessions/demos"))
     parser.add_argument("--archive-dir", type=Path, default=BATCH_ARCHIVE_ROOT)
-    parser.add_argument("--repo-root", type=Path, default=DEFAULT_REPO_ROOT)
+    parser.add_argument(
+        "--runtime-root",
+        "--repo-root",
+        dest="runtime_root",
+        type=Path,
+        default=DEFAULT_REPO_ROOT,
+        help="runtime data root containing runtime_sessions and runtime_frames",
+    )
     parser.add_argument("--overwrite", action="store_true", help="replace existing archive artifacts")
     parser.add_argument("--keep-staging", action="store_true", help="keep staging directories after completion")
     parser.add_argument(
@@ -36,7 +43,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    repo_root = args.repo_root.resolve()
+    repo_root = args.runtime_root.resolve()
     demos_root = resolve_demos_root(args.demos_root, repo_root)
     archive_dir = args.archive_dir.resolve() if args.archive_dir.is_absolute() else (Path(__file__).resolve().parent / args.archive_dir).resolve()
     if not args.dry_run:

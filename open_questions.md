@@ -116,9 +116,9 @@ This audit did not fully load a TAC sample to avoid expensive terminal-side work
 Current raw data requires:
 
 - demo-local paths for `manifest["npz"]` and `manifest["rosbag_uri"]`
-- repo-root-relative paths for `manifest["sensor_paths"]`
+- runtime-root-relative paths for `manifest["sensor_paths"]` (`--runtime-root` in DatasetBuilder CLI)
 
-The future builder CLI should make the repo root explicit and should fail if the manifest path contract is violated.
+The builder CLI makes the runtime root explicit and should fail if the manifest path contract is violated.
 
 Resolved decision:
 

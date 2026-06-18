@@ -21,7 +21,14 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="output .h5 path; defaults to DatasetBuilder/outputs/<demo_id>.h5",
     )
-    parser.add_argument("--repo-root", type=Path, default=DEFAULT_REPO_ROOT, help="repository root for runtime_frames paths")
+    parser.add_argument(
+        "--runtime-root",
+        "--repo-root",
+        dest="runtime_root",
+        type=Path,
+        default=DEFAULT_REPO_ROOT,
+        help="runtime data root containing runtime_sessions and runtime_frames",
+    )
     parser.add_argument("--report", type=Path, default=None, help="optional JSON sidecar report path")
     parser.add_argument("--overwrite", action="store_true", help="replace an existing output .h5")
     parser.add_argument("--min-free-gb", type=float, default=20.0, help="minimum free space required on output filesystem")
@@ -35,7 +42,7 @@ def main() -> int:
     ctx = DemoBuildContext(
         manifest_path=args.manifest,
         output_path=output_path,
-        repo_root=args.repo_root,
+        repo_root=args.runtime_root,
         report_path=args.report,
         min_free_gb=args.min_free_gb,
     )

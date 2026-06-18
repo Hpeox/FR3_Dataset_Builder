@@ -22,12 +22,12 @@ For processable demos, the builder should consume existing alignment artifacts u
 Current sampled manifests use two different relative path contracts:
 
 - `manifest["npz"][...]` and `manifest["rosbag_uri"]` are demo-directory relative.
-- `manifest["sensor_paths"]["ft300"]` and `manifest["sensor_paths"]["xense"]` are repo-root relative, for example `runtime_frames/data_FT_20260601_194946.npy`.
+- `manifest["sensor_paths"]["ft300"]` and `manifest["sensor_paths"]["xense"]` are runtime-root relative, for example `runtime_frames/data_FT_20260601_194946.npy`.
 
 This is not bash-cwd relative. The builder should resolve paths from explicit anchors:
 
 - manifest-owned demo files: `demo_dir / relative_path`
-- external `runtime_frames` files: `repo_root / relative_path`
+- external `runtime_frames` files: `runtime_root / relative_path`
 
 If any required path is missing for a done/aligned demo, the builder should fail that demo with a clear runtime error. It should not invent fallback paths from filenames.
 
@@ -180,7 +180,7 @@ Cold-storage archive creation should reuse the same authoritative resource disco
 1. Start from `runtime_sessions/demos/demo_xxx/manifest.json`.
 2. Require `manifest.status == "done"` and `aligned/aligned_manifest.json` with `status == "done"` for the current archiveable set.
 3. Resolve `manifest["npz"][...]` and `manifest["rosbag_uri"]` relative to the demo directory.
-4. Resolve `manifest["sensor_paths"]["ft300"]` and `manifest["sensor_paths"]["xense"]` relative to the repository root.
+4. Resolve `manifest["sensor_paths"]["ft300"]` and `manifest["sensor_paths"]["xense"]` relative to the runtime data root passed as `--runtime-root` (`--repo-root` is a compatibility alias).
 5. Cross-check `manifest["sensor_paths"]["ft300"]` against `aligned_manifest["sources"]["ft300s_saved_file"]`.
 6. Cross-check `manifest["sensor_paths"]["xense"]` against `aligned_manifest["sources"]["xense_saved_file"]`.
 7. Cross-check `manifest["rosbag_uri"]` against `aligned_manifest["sources"]["rosbag_uri"]`.
