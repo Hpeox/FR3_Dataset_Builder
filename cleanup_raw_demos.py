@@ -126,6 +126,7 @@ def print_plan(plan: CleanupPlan, index: int, total: int, dry_run: bool) -> None
     prefix = "DRY-RUN " if dry_run else ""
     print(f"\n[{index}/{total}] {prefix}{candidate.demo_id}", flush=True)
     print(f"mode_status: {candidate.status}", flush=True)
+    print_manifest_reason_fields(candidate.manifest, candidate.status)
     if candidate.completion is not None:
         print(
             "completed_outputs: "
@@ -153,6 +154,14 @@ def print_plan(plan: CleanupPlan, index: int, total: int, dry_run: bool) -> None
     print(f"estimated_total: {format_size(plan.total_size)}", flush=True)
 
 
+def print_manifest_reason_fields(manifest: dict, status: str) -> None:
+    if status == "discarded":
+        print(f"discard_reason: {manifest.get('discard_reason', '')}", flush=True)
+    elif status == "failed":
+        print(f"failure_stage: {manifest.get('failure_stage', '')}", flush=True)
+        print(f"failure_reason: {manifest.get('failure_reason', '')}", flush=True)
+
+
 def print_summary(summary: dict) -> None:
     compact = {
         "mode": summary["mode"],
@@ -173,4 +182,3 @@ def print_summary(summary: dict) -> None:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanup_raw_demos
 import raw_cleanup
 from conftest import write_json
 from raw_cleanup import CleanupConfig, CleanupFailure, build_plan, delete_plan, discover
@@ -67,6 +68,12 @@ def make_cleanup_demo(
         )
         (hdf5_dir / f"{demo_id}.h5").write_bytes(b"h5-data")
     return demo_dir / "manifest.json"
+
+
+def update_manifest(path: Path, **values: str) -> None:
+    payload = raw_cleanup.read_json(path)
+    payload.update(values)
+    write_json(path, payload)
 
 
 def cleanup_config(repo: Path, mode: str, *, dry_run: bool = False) -> CleanupConfig:
@@ -178,6 +185,50 @@ def test_discarded_does_not_derive_runtime_config(tmp_path: Path) -> None:
 
     assert plan.external_files == []
     assert plan.runtime_config.action == "not_applicable"
+
+
+def test_print_plan_shows_discard_reason(tmp_path: Path, capsys) -> None:
+    repo = tmp_path / "repo"
+    manifest_path = make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165503",
+        status="discarded",
+        with_sensor_paths=False,
+    )
+    update_manifest(manifest_path, discard_reason="operator rejected sample")
+    config = cleanup_config(repo, "discarded")
+    discovery = discover(config)
+    plan = build_plan(discovery.candidates[0], config, discovery.runtime_config_refs)
+
+    cleanup_raw_demos.print_plan(plan, 1, 1, dry_run=True)
+
+    out = capsys.readouterr().out
+    assert "discard_reason: operator rejected sample" in out
+
+
+def test_print_plan_shows_failed_stage_and_reason(tmp_path: Path, capsys) -> None:
+    repo = tmp_path / "repo"
+    manifest_path = make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165900",
+        status="failed",
+        tac_ts="20260605_165900",
+        config_ts="20260605_163106",
+    )
+    update_manifest(
+        manifest_path,
+        failure_stage="FINALIZING",
+        failure_reason="sensor stop timeout",
+    )
+    config = cleanup_config(repo, "failed")
+    discovery = discover(config)
+    plan = build_plan(discovery.candidates[0], config, discovery.runtime_config_refs)
+
+    cleanup_raw_demos.print_plan(plan, 1, 1, dry_run=True)
+
+    out = capsys.readouterr().out
+    assert "failure_stage: FINALIZING" in out
+    assert "failure_reason: sensor stop timeout" in out
 
 
 def test_deletion_order_with_flag_external_config_manifest_and_dir(tmp_path: Path, monkeypatch) -> None:
