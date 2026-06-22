@@ -39,6 +39,8 @@ def make_cleanup_demo(
 
     manifest = {
         "status": status,
+        "task_name": "16mm-peg-in-hole",
+        "language_instruction": "Pick up the test object",
         "sensor_paths": sensor_paths,
         "npz": {},
         "rosbag_uri": "rosbag",

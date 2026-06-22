@@ -13,7 +13,7 @@ from .context import DemoBuildContext
 from .sources import Ft300Source, RealSenseSource, XenseSource, ZmqSource, topic_for
 
 
-SCHEMA_VERSION = "v0.1"
+SCHEMA_VERSION = "v0.2"
 SPATIAL_CHUNK_T = 8
 LOWDIM_CHUNK_T_MAX = 512
 COMPRESSION = "zstd"
@@ -87,8 +87,8 @@ def write_attrs(h5: h5py.File, ctx: DemoBuildContext) -> None:
     h5.attrs["total_steps"] = ctx.total_steps
     h5.attrs["schema_version"] = SCHEMA_VERSION
     h5.attrs["nominal_hz"] = ctx.aligned_manifest.get("hz", 30.0)
-    # TODO: Read language_instruction from a specific manifest key when annotations exist.
-    h5.attrs["language_instruction"] = "a placeholder string"
+    h5.attrs["task_name"] = ctx.task_name
+    h5.attrs["language_instruction"] = ctx.language_instruction
     h5.attrs["spatial_chunk_t"] = SPATIAL_CHUNK_T
     h5.attrs["lowdim_chunk_t"] = lowdim_chunk_t
     h5.attrs["compression"] = COMPRESSION

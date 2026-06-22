@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -43,12 +44,14 @@ REQUIRED_ATTRS = (
     "total_steps",
     "schema_version",
     "nominal_hz",
+    "task_name",
     "language_instruction",
     "spatial_chunk_t",
     "lowdim_chunk_t",
     "compression",
     "compression_level",
 )
+TASK_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def parse_args() -> argparse.Namespace:
@@ -72,6 +75,28 @@ def main() -> int:
         for attr in REQUIRED_ATTRS:
             if attr not in h5.attrs:
                 errors.append(f"missing root attr: {attr}")
+        for attr in ("task_name", "language_instruction"):
+            value = h5.attrs.get(attr)
+            if isinstance(value, bytes):
+                value = value.decode("utf-8", errors="replace")
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"{attr} root attr must be a non-empty string")
+        task_name = h5.attrs.get("task_name")
+        if isinstance(task_name, bytes):
+            task_name = task_name.decode("utf-8", errors="replace")
+        if (
+            isinstance(task_name, str)
+            and (
+                not TASK_NAME_PATTERN.fullmatch(task_name)
+                or ".." in task_name
+            )
+        ):
+            errors.append("task_name root attr must be a valid task slug")
+        if h5.attrs.get("schema_version") != "v0.2":
+            errors.append(
+                f"schema_version attr mismatch: expected v0.2, "
+                f"got {h5.attrs.get('schema_version')!r}"
+            )
         t = int(h5.attrs.get("total_steps", -1))
         for path, (dtype, shape_spec) in DATASETS.items():
             if path not in h5:

@@ -40,6 +40,8 @@ def make_demo(repo_root: Path, demo_id: str = "demo_20260605_165503") -> Path:
         demo_dir / "manifest.json",
         {
             "status": "done",
+            "task_name": "16mm-peg-in-hole",
+            "language_instruction": "Pick up the test object",
             "npz": npz,
             "sensor_paths": sensor_paths,
             "rosbag_uri": "rosbag",

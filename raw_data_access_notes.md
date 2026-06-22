@@ -15,6 +15,11 @@ A demo is processable only when both are true:
 - `manifest.json` has `status == "done"`.
 - `aligned/aligned_manifest.json` exists and has `status == "done"`.
 
+HDF5 export additionally requires a valid top-level `manifest["task_name"]`
+task slug and a non-empty `manifest["language_instruction"]` string. Both are
+copied verbatim to HDF5 root attributes. Older manifests must be updated
+explicitly; the builder does not guess or substitute task metadata.
+
 For processable demos, the builder should consume existing alignment artifacts under `aligned/` and must not rerun timestamp alignment.
 
 ## Relative path rules observed in current data

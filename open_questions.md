@@ -49,10 +49,13 @@ Current `manifest.status == "done"` still remains the processability gate togeth
 
 Resolved decision:
 
-- Use a placeholder string for now.
-- The placeholder should be a builder CLI/config value, because no raw manifest field, sidecar annotation file, or code path currently stores this value.
-- (from user) just use "a placeholder string" as the placeholder string
-- (from user) also leave a #TODO tag somewhere in the code, in the furture the string will be determined by specific key in manifest
+- MainController stores the selected task and instruction in top-level
+  `manifest["task_name"]` and `manifest["language_instruction"]` strings.
+- HDF5 schema `v0.2` requires both fields and copies them verbatim to the
+  corresponding root attributes.
+- Missing or invalid values fail HDF5 build and batch dry-run.
+- DatasetBuilder has no fallback. Older manifests must be updated explicitly
+  before HDF5 export.
 
 ## Camera semantic names
 
@@ -151,7 +154,8 @@ currently, all the label should be success, fail demo maybe will be implemented 
 
 ## Language instruction
 
-currently, use a placeholder instead
+Use the required top-level `manifest["task_name"]` and
+`manifest["language_instruction"]` strings. Do not infer or synthesize values.
 
 ## Camera semantic names
 

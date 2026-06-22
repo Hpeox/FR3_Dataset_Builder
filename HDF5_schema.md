@@ -24,9 +24,10 @@ demo_xxx.h5
 │   ├── demo_id: string
 │   ├── success: bool
 │   ├── total_steps: int
-│   ├── schema_version: "v0.1"
+│   ├── schema_version: "v0.2"
 │   ├── nominal_hz: 30
-│   ├── language_instruction: "<a sentence>"
+│   ├── task_name: "<manifest.task_name>"
+│   ├── language_instruction: "<manifest.language_instruction>"
 │   ├── spatial_chunk_t: 8
 │   ├── lowdim_chunk_t: 512
 │   ├── compression: "zstd"
@@ -199,3 +200,7 @@ demo_xxx.h5
             attrs:
               sensor_names = ["left", "right"]
 ```
+
+`task_name` and `language_instruction` are copied verbatim from the required
+top-level `manifest.json` string fields. `task_name` must satisfy the safe task
+slug rule. DatasetBuilder does not synthesize values or accept a CLI fallback.

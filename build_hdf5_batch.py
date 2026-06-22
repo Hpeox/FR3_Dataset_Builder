@@ -18,6 +18,7 @@ from hdf5_builder.context import (
     required_image_topics,
     resolve_demo_path,
     resolve_repo_path,
+    task_metadata_from_manifest,
 )
 from hdf5_builder.manifest_update import mark_h5_generated
 from hdf5_builder.writer import write_hdf5
@@ -208,6 +209,7 @@ def dry_run_check_demo(manifest_path: Path, output_path: Path, report_path: Path
     demo_dir = manifest_path.parent
     aligned_dir = demo_dir / "aligned"
     manifest = read_json(manifest_path)
+    task_metadata_from_manifest(manifest)
     aligned_manifest = read_json(aligned_dir / "aligned_manifest.json")
     read_json(aligned_dir / "alignment_config.json")
 

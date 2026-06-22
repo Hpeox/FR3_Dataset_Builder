@@ -276,7 +276,7 @@ Resolved by review answers:
 - If the first row for a required stream has index `-1` and no previous frame exists, remove that leading row from the HDF5 output.
 - Warnings should be printed to the terminal and written to a JSON sidecar report.
 - `/attrs/success` should currently be `True` for all processable demos.
-- `/attrs/language_instruction` should currently use the literal placeholder string `"a placeholder string"`; future builder code should leave a `# TODO` for reading this from a specific manifest key.
+- `/attrs/task_name` and `/attrs/language_instruction` are copied verbatim from required top-level manifest strings. Invalid or missing values fail HDF5 build and batch dry-run; there is no fallback.
 - RealSense `top`/`side`/`wrist1`/`wrist2` mapping is serial-number based.
 - Xense `left`/`right` mapping is serial-number based.
 - Xense external `.npy` should be loaded as a whole object.

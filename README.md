@@ -23,6 +23,8 @@ linked documents below. This README is the operational entry point.
 - `restore_archive.py`: restore a cold-storage archive into a raw dataset tree.
 - `cleanup_raw_demos.py`: interactively delete raw demos and owned
   `runtime_frames` resources after archive/HDF5 publication or rejection.
+- `cleanup_raw_demos.sh`: run raw demo cleanup for `completed`, `discarded`,
+  and `failed` demos in sequence.
 - `archive_builder/`: archive discovery, compression, rosbag conversion,
   archive metadata, ZIP writing, dry-run checks, and restore logic.
 - `tools/`: ad hoc inspection and validation tools.
@@ -43,6 +45,8 @@ A demo is processable only when both conditions are true:
 
 - `manifest.status == "done"`
 - `aligned/aligned_manifest.json.status == "done"`
+- `manifest.task_name` is a valid non-empty task slug
+- `manifest.language_instruction` is a non-empty string
 
 The builders also cross-check raw inputs recorded in `manifest.json` against
 `aligned/aligned_manifest.json.sources`. Demo-owned NPZ and rosbag paths are
@@ -51,6 +55,12 @@ relative to `--runtime-root`, which is the runtime data root containing
 `runtime_sessions/` and `runtime_frames/`. It defaults to the parent of
 `DatasetBuilder` for the repository-local MainController layout. The previous
 name `--repo-root` remains available as a compatibility alias.
+
+HDF5 export writes `manifest.task_name` and `manifest.language_instruction`
+directly to the corresponding root attributes. There is no DatasetBuilder CLI
+fallback. Older manifests without either field must be updated explicitly
+before HDF5 export; archive creation and restore continue to preserve manifests
+without interpreting these fields.
 
 ## HDF5 Workflows
 
@@ -232,6 +242,26 @@ only when existing restored files may be overwritten.
 directories and their owned external `runtime_frames` files. It never edits raw
 manifests or archive metadata.
 
+Run all three cleanup modes with one command:
+
+```bash
+bash DatasetBuilder/cleanup_raw_demos.sh
+```
+
+The wrapper runs `completed`, `discarded`, and `failed` in sequence with the
+existing parameters:
+
+- `--demos-root runtime_sessions/demos`
+- `--runtime-frames-root runtime_frames`
+- `--archives-root /data/external/DATASET/Archived` for `completed`
+- `--hdf5-root /data/external/DATASET` for `completed`
+
+Use `bash DatasetBuilder/cleanup_raw_demos.sh --dry-run` to show the same
+per-demo deletion plans for all three modes without creating the cleanup flag
+or deleting files.
+
+Each mode can also be run separately with the original commands.
+
 Completed demos require explicit archive and HDF5 roots:
 
 ```bash
@@ -257,8 +287,8 @@ python3 DatasetBuilder/cleanup_raw_demos.py \
   --runtime-frames-root runtime_frames
 ```
 
-Use `--dry-run` to show the same per-demo deletion plans without creating the
-cleanup flag or deleting files.
+Add `--dry-run` to any individual command to show its deletion plans without
+creating the cleanup flag or deleting files.
 
 Cleanup modes:
 
@@ -317,6 +347,25 @@ Archive publication writes:
 The authoritative archive SHA-256 is stored in the external
 `<demo_id>.archive.json` as `zip_sha256`. The ZIP-internal archive manifest
 cannot contain the final ZIP SHA-256 without making the hash circular.
+
+### Legacy external task metadata migration
+
+Use the standalone migration tool for legacy artifacts under
+`/data/external/DATASET`. Run it with the system Python interpreter:
+
+```bash
+/usr/bin/python3 tools/migrate_external_task_metadata.py
+/usr/bin/python3 tools/migrate_external_task_metadata.py --apply
+```
+
+The default invocation validates and migrates matching HDF5, ZIP, and archive
+sidecar sets to task metadata schema `v0.2`. It persists one instruction
+assignment per demo in `task_metadata_migration_state.json`, so interrupted
+runs reuse the same instruction when resumed. HDF5 root attributes are updated
+in place. ZIP updates replace only `demo/manifest.json`; unchanged members keep
+their existing compressed data. External archive sidecars and matching
+successful entries in `batch_archive_report.json` receive the updated ZIP size
+and SHA-256.
 
 ## Operational Notes
 

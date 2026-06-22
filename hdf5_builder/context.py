@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,12 +34,31 @@ REQUIRED_STREAMS = (
     "realsense_cam4_color",
     "realsense_cam4_aligned_depth",
 )
+TASK_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise RuntimeError(f"required JSON file is missing: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def task_metadata_from_manifest(manifest: dict[str, Any]) -> tuple[str, str]:
+    task_name = manifest.get("task_name")
+    if (
+        not isinstance(task_name, str)
+        or not TASK_NAME_PATTERN.fullmatch(task_name)
+        or ".." in task_name
+    ):
+        raise RuntimeError("manifest.task_name must be a valid non-empty task slug")
+    language_instruction = manifest.get("language_instruction")
+    if (
+        not isinstance(language_instruction, str)
+        or not language_instruction.strip()
+        or "\x00" in language_instruction
+    ):
+        raise RuntimeError("manifest.language_instruction must be a non-empty string")
+    return task_name, language_instruction
 
 
 def resolve_demo_path(demo_dir: Path, value: str | None, label: str) -> Path:
@@ -103,6 +123,8 @@ class DemoBuildContext:
     sensor_paths: dict[str, Path] = field(init=False)
     rosbag_uri: Path = field(init=False)
     image_topics: list[str] = field(init=False)
+    task_name: str = field(init=False)
+    language_instruction: str = field(init=False)
     aligned_rows: np.ndarray = field(init=False)
     resolved_indices: dict[str, np.ndarray] = field(init=False)
     report: BuildReport = field(init=False)
@@ -123,6 +145,9 @@ class DemoBuildContext:
         self.demo_dir = self.manifest_path.parent
         self.aligned_dir = self.demo_dir / "aligned"
         self.manifest = read_json(self.manifest_path)
+        self.task_name, self.language_instruction = task_metadata_from_manifest(
+            self.manifest
+        )
         self.aligned_manifest = read_json(self.aligned_dir / "aligned_manifest.json")
         self.alignment_config = read_json(self.aligned_dir / "alignment_config.json")
         self._check_processable()
