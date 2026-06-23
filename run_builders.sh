@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-nohup taskset -c 0-9,12-15 \
-  python3 DatasetBuilder/build_hdf5_batch.py \
+nohup DatasetBuilder/build_hdf5_parallel.sh \
   --demos-root runtime_sessions/demos \
   > ./DatasetBuilder/batch.log 2>&1 &
 

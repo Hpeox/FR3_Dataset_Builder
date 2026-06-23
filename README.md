@@ -16,6 +16,8 @@ linked documents below. This README is the operational entry point.
 - `build_hdf5.py`: build one HDF5 file from one raw demo `manifest.json`.
 - `build_hdf5_batch.py`: scan a demos directory and build HDF5 files for all
   processable demos.
+- `build_hdf5_parallel.sh`: build a fixed startup snapshot with multiple
+  CPU-pinned Python workers.
 - `hdf5_builder/`: HDF5 path resolution, source readers, writer, report, and
   manifest update helpers.
 - `build_archive.py`: build one cold-storage ZIP archive from one raw demo.
@@ -143,6 +145,38 @@ HDF5 output and report paths may be any writable path. The defaults remain
 `DatasetBuilder/outputs/<demo_id>.h5` for single-demo runs and
 `/data/internal/DATASET/` for batch runs, but custom `--output`, `--report`,
 `--output-dir`, and `--batch-report` values are not restricted by the tool.
+
+### Parallel Batch
+
+Use the shell wrapper to process one fixed startup snapshot with four Python
+workers:
+
+```bash
+DatasetBuilder/build_hdf5_parallel.sh \
+  --workers 4 \
+  --demos-root runtime_sessions/demos \
+  --output-dir /data/internal/DATASET
+```
+
+Workers dynamically claim tasks from a file-backed queue, so each demo in the
+snapshot receives exactly one final result. Demos created after startup are
+left for the next run. The default CPU assignments are `0,1`, `2,3`, `4,5`,
+and `6,7`. Up to seven workers are supported using `8,9`, `12,13`, and `14,15`;
+the `10,11` pair is intentionally skipped. The wrapper validates the CPU
+topology with `lscpu` before starting and launches each worker through
+`taskset`.
+
+Queue state, per-worker logs, per-demo results, and the final summary are
+stored under `DatasetBuilder/parallel_runs/<run-id>/` by default. Use
+`--run-dir` to select another location. `SIGINT` and `SIGTERM` terminate all
+worker process groups. A worker crash returns its current task to the queue
+once; a second crash records a final `worker_crash` failure.
+
+The wrapper accepts the batch HDF5 options `--overwrite`, `--skip-existing`,
+`--no-skip-existing`, `--min-free-gb`, `--no-update-manifest`,
+`--batch-report`, and `--dry-run`. It intentionally does not support
+`--limit`, because every directory in the startup snapshot must receive a
+result.
 
 ## Archive Workflows
 

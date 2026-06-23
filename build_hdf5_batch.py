@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import numpy as np
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -75,84 +76,35 @@ def main() -> int:
 
     processable_seen = 0
     for demo_dir in sorted(demos_root.glob("demo_*")):
-        manifest_path = demo_dir / "manifest.json"
-        output_path = output_dir / f"{demo_dir.name}.h5"
-        report_path = output_dir / f"{demo_dir.name}.build_report.json"
-        base_record = {
-            "demo_id": demo_dir.name,
-            "manifest_path": manifest_path.as_posix(),
-            "output_path": output_path.as_posix(),
-            "report_path": report_path.as_posix(),
-        }
-        skip_reason = skip_reason_for_demo(manifest_path)
-        if skip_reason:
-            record = {**base_record, "status": "skipped", "reason": skip_reason}
-            summary["skipped"] += 1
-            summary["results"].append(record)
-            print_status(record)
-            if not args.dry_run:
-                write_batch_report(batch_report_path, summary)
+        if not demo_dir.is_dir():
             continue
-
-        processable_seen += 1
-        if args.limit is not None and processable_seen > args.limit:
-            summary["limit_reached"] = True
-            break
-
-        manifest = read_json(manifest_path)
-        if args.dry_run:
-            try:
-                dry_run_payload = dry_run_check_demo(manifest_path, output_path, report_path, repo_root)
-                record = {
-                    **base_record,
-                    "status": "dry_run_ok",
-                    "would_skip_existing": bool(
-                        args.skip_existing and output_path.exists() and bool(manifest.get("h5_generated"))
-                    ),
-                    **dry_run_payload,
-                }
-                summary["checked"] += 1
-            except Exception as exc:
-                record = {**base_record, "status": "failed", "error": str(exc)}
-                summary["failed"] += 1
-            summary["results"].append(record)
-            print_status(record)
-            continue
-
-        if args.skip_existing and output_path.exists() and bool(manifest.get("h5_generated")):
-            record = {**base_record, "status": "skipped", "reason": "existing_h5_and_manifest_marked"}
-            summary["skipped"] += 1
-            summary["results"].append(record)
-            print_status(record)
-            write_batch_report(batch_report_path, summary)
-            continue
-
-        summary["processed"] += 1
-        try:
-            ctx = DemoBuildContext(
-                manifest_path=manifest_path,
-                output_path=output_path,
+        if skip_reason_for_demo(demo_dir / "manifest.json") is None:
+            processable_seen += 1
+            if args.limit is not None and processable_seen > args.limit:
+                summary["limit_reached"] = True
+                break
+        result = process_demo(
+            demo_dir,
+            BatchBuildOptions(
                 repo_root=repo_root,
-                report_path=report_path,
+                output_dir=output_dir,
+                overwrite=args.overwrite,
+                skip_existing=args.skip_existing,
                 min_free_gb=args.min_free_gb,
-                emit_warnings=False,
-            )
-            write_hdf5(ctx, overwrite=args.overwrite)
-            manifest_updated = False
-            if not args.no_update_manifest:
-                mark_h5_generated(ctx.manifest_path)
-                manifest_updated = True
-            record = {
-                **base_record,
-                "status": "succeeded",
-                "exported_rows": ctx.report.exported_rows,
-                "warning_count": len(ctx.report.warnings),
-                "manifest_updated": manifest_updated,
-            }
+                update_manifest=not args.no_update_manifest,
+                dry_run=args.dry_run,
+            ),
+        )
+        record = result.record
+        summary["processed"] += int(result.processed)
+        if record["status"] == "succeeded":
             summary["succeeded"] += 1
-        except Exception as exc:
-            record = {**base_record, "status": "failed", "error": str(exc)}
+        elif record["status"] == "dry_run_ok":
+            summary["checked"] += 1
+        elif record["status"] == "failed":
             summary["failed"] += 1
+        else:
+            summary["skipped"] += 1
         summary["results"].append(record)
         print_status(record)
         if not args.dry_run:
@@ -167,6 +119,103 @@ def main() -> int:
         )
     )
     return 1 if summary["failed"] else 0
+
+
+@dataclass(frozen=True)
+class BatchBuildOptions:
+    repo_root: Path
+    output_dir: Path
+    overwrite: bool = False
+    skip_existing: bool = True
+    min_free_gb: float = 20.0
+    update_manifest: bool = True
+    dry_run: bool = False
+
+
+@dataclass(frozen=True)
+class DemoProcessResult:
+    record: dict[str, Any]
+    processed: bool
+
+
+def process_demo(demo_dir: Path, options: BatchBuildOptions) -> DemoProcessResult:
+    manifest_path = demo_dir / "manifest.json"
+    output_path = options.output_dir / f"{demo_dir.name}.h5"
+    report_path = options.output_dir / f"{demo_dir.name}.build_report.json"
+    base_record = {
+        "demo_id": demo_dir.name,
+        "manifest_path": manifest_path.as_posix(),
+        "output_path": output_path.as_posix(),
+        "report_path": report_path.as_posix(),
+    }
+    skip_reason = skip_reason_for_demo(manifest_path)
+    if skip_reason:
+        return DemoProcessResult(
+            {**base_record, "status": "skipped", "reason": skip_reason},
+            processed=False,
+        )
+
+    manifest = read_json(manifest_path)
+    if options.dry_run:
+        try:
+            payload = dry_run_check_demo(
+                manifest_path,
+                output_path,
+                report_path,
+                options.repo_root,
+            )
+            record = {
+                **base_record,
+                "status": "dry_run_ok",
+                "would_skip_existing": bool(
+                    options.skip_existing
+                    and output_path.exists()
+                    and bool(manifest.get("h5_generated"))
+                ),
+                **payload,
+            }
+        except Exception as exc:
+            record = {**base_record, "status": "failed", "error": str(exc)}
+        return DemoProcessResult(record, processed=False)
+
+    if (
+        options.skip_existing
+        and output_path.exists()
+        and bool(manifest.get("h5_generated"))
+    ):
+        return DemoProcessResult(
+            {
+                **base_record,
+                "status": "skipped",
+                "reason": "existing_h5_and_manifest_marked",
+            },
+            processed=False,
+        )
+
+    try:
+        ctx = DemoBuildContext(
+            manifest_path=manifest_path,
+            output_path=output_path,
+            repo_root=options.repo_root,
+            report_path=report_path,
+            min_free_gb=options.min_free_gb,
+            emit_warnings=False,
+        )
+        write_hdf5(ctx, overwrite=options.overwrite)
+        manifest_updated = False
+        if options.update_manifest:
+            mark_h5_generated(ctx.manifest_path)
+            manifest_updated = True
+        record = {
+            **base_record,
+            "status": "succeeded",
+            "exported_rows": ctx.report.exported_rows,
+            "warning_count": len(ctx.report.warnings),
+            "manifest_updated": manifest_updated,
+        }
+    except Exception as exc:
+        record = {**base_record, "status": "failed", "error": str(exc)}
+    return DemoProcessResult(record, processed=True)
 
 
 def resolve_demos_root(path: Path, repo_root: Path) -> Path:
