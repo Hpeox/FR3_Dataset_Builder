@@ -16,7 +16,7 @@ from .report import BuildReport
 
 DATASET_BUILDER_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REPO_ROOT = DATASET_BUILDER_ROOT.parent
-EXTERNAL_DATASET_ROOT = Path("/data/external/DATASET")
+DATASET_ROOT = Path("/data/internal/DATASET")
 REQUIRED_NPZ = ("ft300", "xense", "realsense", "zmq")
 REQUIRED_SENSOR_PATHS = ("ft300", "xense")
 REQUIRED_STREAMS = (

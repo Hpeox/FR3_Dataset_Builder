@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from hdf5_builder.context import (
+    DATASET_ROOT,
     DATASET_BUILDER_ROOT,
     DEFAULT_REPO_ROOT,
-    EXTERNAL_DATASET_ROOT,
     DemoBuildContext,
     read_json,
     required_image_topics,
@@ -27,7 +27,7 @@ from hdf5_builder.writer import write_hdf5
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demos-root", type=Path, default=Path("runtime_sessions/demos"))
-    parser.add_argument("--output-dir", type=Path, default=EXTERNAL_DATASET_ROOT)
+    parser.add_argument("--output-dir", type=Path, default=DATASET_ROOT)
     parser.add_argument(
         "--runtime-root",
         "--repo-root",

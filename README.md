@@ -107,10 +107,10 @@ python3 DatasetBuilder/build_hdf5_batch.py \
 
 Default outputs:
 
-- output directory: `/data/external/DATASET/`
-- HDF5 per demo: `/data/external/DATASET/<demo_id>.h5`
-- report per demo: `/data/external/DATASET/<demo_id>.build_report.json`
-- batch report: `/data/external/DATASET/batch_build_report.json`
+- output directory: `/data/internal/DATASET/`
+- HDF5 per demo: `/data/internal/DATASET/<demo_id>.h5`
+- report per demo: `/data/internal/DATASET/<demo_id>.build_report.json`
+- batch report: `/data/internal/DATASET/batch_build_report.json`
 
 Batch HDF5 mode scans one level of `demo_*` directories under `--demos-root`.
 `--skip-existing` is enabled by default and skips a demo only when the output
@@ -131,7 +131,7 @@ python3 DatasetBuilder/build_hdf5_batch.py --no-update-manifest
 
 # Write batch output under an explicit output directory.
 python3 DatasetBuilder/build_hdf5_batch.py \
-  --output-dir /data/external/DATASET
+  --output-dir /data/internal/DATASET
 
 # Read MainController data stored under an external runtime root.
 python3 DatasetBuilder/build_hdf5_batch.py \
@@ -141,7 +141,7 @@ python3 DatasetBuilder/build_hdf5_batch.py \
 
 HDF5 output and report paths may be any writable path. The defaults remain
 `DatasetBuilder/outputs/<demo_id>.h5` for single-demo runs and
-`/data/external/DATASET/` for batch runs, but custom `--output`, `--report`,
+`/data/internal/DATASET/` for batch runs, but custom `--output`, `--report`,
 `--output-dir`, and `--batch-report` values are not restricted by the tool.
 
 ## Archive Workflows
@@ -184,11 +184,11 @@ python3 DatasetBuilder/build_archive_batch.py \
 
 Default outputs:
 
-- archive directory: `/data/external/DATASET/Archived`
-- archive ZIP per demo: `/data/external/DATASET/Archived/<demo_id>.zip`
+- archive directory: `/data/internal/DATASET/Archived`
+- archive ZIP per demo: `/data/internal/DATASET/Archived/<demo_id>.zip`
 - archive metadata per demo:
-  `/data/external/DATASET/Archived/<demo_id>.archive.json`
-- batch report: `/data/external/DATASET/Archived/batch_archive_report.json`
+  `/data/internal/DATASET/Archived/<demo_id>.archive.json`
+- batch report: `/data/internal/DATASET/Archived/batch_archive_report.json`
 
 Batch archive mode defaults to `--update-manifest`, which sets
 `archieved: true` in the raw demo manifest after successful publication. Use
@@ -223,14 +223,14 @@ Restore using the external archive metadata:
 
 ```bash
 python3 DatasetBuilder/restore_archive.py \
-  --archive-json /data/external/DATASET/Archived/<demo_id>.archive.json
+  --archive-json /data/internal/DATASET/Archived/<demo_id>.archive.json
 ```
 
 Restore using only a ZIP file:
 
 ```bash
 python3 DatasetBuilder/restore_archive.py \
-  --zip /data/external/DATASET/Archived/<demo_id>.zip
+  --zip /data/internal/DATASET/Archived/<demo_id>.zip
 ```
 
 Use `--restore-root <path>` to override the restore destination. Use `--force`
@@ -253,8 +253,8 @@ existing parameters:
 
 - `--demos-root runtime_sessions/demos`
 - `--runtime-frames-root runtime_frames`
-- `--archives-root /data/external/DATASET/Archived` for `completed`
-- `--hdf5-root /data/external/DATASET` for `completed`
+- `--archives-root /data/internal/DATASET/Archived` for `completed`
+- `--hdf5-root /data/internal/DATASET` for `completed`
 
 Use `bash DatasetBuilder/cleanup_raw_demos.sh --dry-run` to show the same
 per-demo deletion plans for all three modes without creating the cleanup flag
@@ -269,8 +269,8 @@ python3 DatasetBuilder/cleanup_raw_demos.py \
   --mode completed \
   --demos-root runtime_sessions/demos \
   --runtime-frames-root runtime_frames \
-  --archives-root /data/external/DATASET/Archived \
-  --hdf5-root /data/external/DATASET
+  --archives-root /data/internal/DATASET/Archived \
+  --hdf5-root /data/internal/DATASET
 ```
 
 Rejected demos do not require archive or HDF5 roots:
@@ -351,7 +351,7 @@ cannot contain the final ZIP SHA-256 without making the hash circular.
 ### Legacy external task metadata migration
 
 Use the standalone migration tool for legacy artifacts under
-`/data/external/DATASET`. Run it with the system Python interpreter:
+`/data/internal/DATASET`. Run it with the system Python interpreter:
 
 ```bash
 /usr/bin/python3 tools/migrate_external_task_metadata.py

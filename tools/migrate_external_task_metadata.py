@@ -22,7 +22,7 @@ from typing import Any
 import h5py
 
 
-DATASET_ROOT = Path("/data/external/DATASET")
+DATASET_ROOT = Path("/data/internal/DATASET")
 TASK_NAME = "16mm-peg-in-hole"
 TARGET_SCHEMA_VERSION = "v0.2"
 LEGACY_SCHEMA_VERSION = "v0.1"

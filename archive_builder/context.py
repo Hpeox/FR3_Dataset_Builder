@@ -11,10 +11,10 @@ from typing import Any
 
 DATASET_BUILDER_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REPO_ROOT = DATASET_BUILDER_ROOT.parent
-EXTERNAL_DATASET_ROOT = Path("/data/external/DATASET")
-DEFAULT_ARCHIVE_ROOT = EXTERNAL_DATASET_ROOT / "archives"
+DATASET_ROOT = Path("/data/internal/DATASET")
+DEFAULT_ARCHIVE_ROOT = DATASET_ROOT / "archives"
 SINGLE_ARCHIVE_ROOT = DATASET_BUILDER_ROOT / "outputs"
-BATCH_ARCHIVE_ROOT = EXTERNAL_DATASET_ROOT / "Archived"
+BATCH_ARCHIVE_ROOT = DATASET_ROOT / "Archived"
 REQUIRED_NPZ = ("ft300", "xense", "realsense", "zmq")
 REQUIRED_SENSOR_PATHS = ("ft300", "xense")
 TAC_CONFIG_SENSOR_FILES = ("runtime_OG000544", "runtime_OG001009")

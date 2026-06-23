@@ -25,8 +25,8 @@ python3 "${script_dir}/cleanup_raw_demos.py" \
     --mode completed \
     --demos-root "${repo_root}/runtime_sessions/demos" \
     --runtime-frames-root "${repo_root}/runtime_frames" \
-    --archives-root /data/external/DATASET/Archived \
-    --hdf5-root /data/external/DATASET \
+    --archives-root /data/internal/DATASET/Archived \
+    --hdf5-root /data/internal/DATASET \
     "${extra_args[@]}"
 
 python3 "${script_dir}/cleanup_raw_demos.py" \

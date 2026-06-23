@@ -158,7 +158,7 @@ def test_cli_defaults_match_single_and_batch_manifest_policy(monkeypatch) -> Non
     batch = build_archive_batch_cli.parse_args()
     assert batch.update_manifest is True
     assert batch.dry_run is False
-    assert batch.archive_dir.as_posix() == "/data/external/DATASET/Archived"
+    assert batch.archive_dir.as_posix() == "/data/internal/DATASET/Archived"
 
     monkeypatch.setattr("sys.argv", ["build_archive_batch.py", "--no-update-manifest"])
     batch_no_update = build_archive_batch_cli.parse_args()
