@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Migrate legacy external HDF5 and ZIP artifacts to task metadata schema v0.2."""
+"""Migrate legacy external HDF5 and ZIP artifacts to HDF5 schema v0.3."""
 
 from __future__ import annotations
 
@@ -24,9 +24,12 @@ import h5py
 
 DATASET_ROOT = Path("/data/internal/DATASET")
 TASK_NAME = "16mm-peg-in-hole"
-TARGET_SCHEMA_VERSION = "v0.2"
+TARGET_SCHEMA_VERSION = "v0.3"
 LEGACY_SCHEMA_VERSION = "v0.1"
+TASK_METADATA_SCHEMA_VERSION = "v0.2"
 LEGACY_INSTRUCTION = "a placeholder string"
+OLD_TACTILE_IMAGE_PATH = "/observations/tactile_images/rgb"
+NEW_TACTILE_IMAGE_PATH = "/observations/tactile_images/bgr"
 STATE_NAME = "task_metadata_migration_state.json"
 REPORT_NAME = "task_metadata_migration_report.json"
 WEIGHT_SUM_ABS_TOL = 1e-9
@@ -201,17 +204,33 @@ def inspect_h5(artifact: ArtifactSet, allowed: set[str]) -> str | None:
         schema = decode_attr(h5.attrs.get("schema_version"))
         task = decode_attr(h5.attrs.get("task_name"))
         instruction = decode_attr(h5.attrs.get("language_instruction"))
+        has_old_path = OLD_TACTILE_IMAGE_PATH in h5
+        has_new_path = NEW_TACTILE_IMAGE_PATH in h5
     if (
         schema == LEGACY_SCHEMA_VERSION
         and task is None
         and instruction == LEGACY_INSTRUCTION
+        and has_old_path
+        and not has_new_path
     ):
         return None
     if (
-        schema == TARGET_SCHEMA_VERSION
+        schema in {TASK_METADATA_SCHEMA_VERSION, TARGET_SCHEMA_VERSION}
         and task == TASK_NAME
         and isinstance(instruction, str)
         and instruction in allowed
+        and (
+            (
+                schema == TASK_METADATA_SCHEMA_VERSION
+                and has_old_path
+                and not has_new_path
+            )
+            or (
+                schema == TARGET_SCHEMA_VERSION
+                and has_new_path
+                and not has_old_path
+            )
+        )
     ):
         return instruction
     raise RuntimeError(
@@ -334,7 +353,8 @@ def validate_state(
         state.get("state_schema_version") != 1
         or state.get("dataset_root") != dataset_root.as_posix()
         or state.get("task_name") != TASK_NAME
-        or state.get("target_hdf5_schema_version") != TARGET_SCHEMA_VERSION
+        or state.get("target_hdf5_schema_version")
+        not in {TASK_METADATA_SCHEMA_VERSION, TARGET_SCHEMA_VERSION}
         or state.get("instruction_source_sha256") != instructions.source_sha256
         or not isinstance(assignments, dict)
         or set(assignments) != expected_ids
@@ -378,6 +398,17 @@ def manifest_with_metadata(
 
 def update_h5(artifact: ArtifactSet, instruction: str) -> None:
     with h5py.File(artifact.h5_path, "r+") as h5:
+        has_old_path = OLD_TACTILE_IMAGE_PATH in h5
+        has_new_path = NEW_TACTILE_IMAGE_PATH in h5
+        if has_old_path and not has_new_path:
+            h5.move(OLD_TACTILE_IMAGE_PATH, NEW_TACTILE_IMAGE_PATH)
+        elif not has_old_path and has_new_path:
+            pass
+        else:
+            raise RuntimeError(
+                f"{artifact.h5_path}: expected exactly one tactile image path; "
+                f"old={has_old_path}, new={has_new_path}"
+            )
         h5.attrs["schema_version"] = TARGET_SCHEMA_VERSION
         h5.attrs["task_name"] = TASK_NAME
         h5.attrs["language_instruction"] = instruction
@@ -387,8 +418,10 @@ def update_h5(artifact: ArtifactSet, instruction: str) -> None:
             decode_attr(h5.attrs.get("schema_version")),
             decode_attr(h5.attrs.get("task_name")),
             decode_attr(h5.attrs.get("language_instruction")),
+            OLD_TACTILE_IMAGE_PATH in h5,
+            NEW_TACTILE_IMAGE_PATH in h5,
         )
-    expected = (TARGET_SCHEMA_VERSION, TASK_NAME, instruction)
+    expected = (TARGET_SCHEMA_VERSION, TASK_NAME, instruction, False, True)
     if actual != expected:
         raise RuntimeError(
             f"{artifact.h5_path}: HDF5 metadata verification failed: {actual!r}"

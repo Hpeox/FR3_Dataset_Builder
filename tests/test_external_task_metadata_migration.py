@@ -34,6 +34,12 @@ def make_fixture(tmp_path: Path, *, with_xense_version: bool) -> tuple[Path, str
         h5.attrs["schema_version"] = "v0.1"
         h5.attrs["language_instruction"] = "a placeholder string"
         h5.create_dataset("data", data=[1, 2, 3])
+        tactile = h5.create_dataset(
+            "/observations/tactile_images/rgb",
+            data=[[[[[1, 2, 3]]]]],
+            dtype="uint8",
+        )
+        tactile.attrs["sensor_names"] = ["left", "right"]
 
     bundle = tmp_path / "bundle"
     member = f"{demo_id}_bundle/demo/manifest.json"
@@ -142,6 +148,10 @@ def test_migration_updates_h5_zip_sidecar_and_batch_report(tmp_path):
         assert h5.attrs["task_name"] == TASK_NAME
         assert h5.attrs["language_instruction"] == INSTRUCTION
         assert h5["data"][:].tolist() == [1, 2, 3]
+        assert "/observations/tactile_images/rgb" not in h5
+        assert h5["/observations/tactile_images/bgr"][...].tolist() == [
+            [[[[1, 2, 3]]]]
+        ]
     with zipfile.ZipFile(artifact.zip_path) as archive:
         manifest = json.loads(archive.read(member))
         assert manifest["task_name"] == TASK_NAME
@@ -178,6 +188,9 @@ def test_migration_is_idempotent_and_reuses_state(tmp_path):
         report_path,
         "/usr/bin/zip",
     )
+    legacy_state = json.loads(state_path.read_bytes())
+    legacy_state["target_hdf5_schema_version"] = "v0.2"
+    state_path.write_text(json.dumps(legacy_state), encoding="utf-8")
     state_before = state_path.read_bytes()
 
     inferred, members, sidecars = inspect_all(artifacts, instructions())

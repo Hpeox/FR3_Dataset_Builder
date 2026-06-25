@@ -51,7 +51,7 @@ Resolved decision:
 
 - MainController stores the selected task and instruction in top-level
   `manifest["task_name"]` and `manifest["language_instruction"]` strings.
-- HDF5 schema `v0.2` requires both fields and copies them verbatim to the
+- HDF5 schema `v0.3` requires both fields and copies them verbatim to the
   corresponding root attributes.
 - Missing or invalid values fail HDF5 build and batch dry-run.
 - DatasetBuilder has no fallback. Older manifests must be updated explicitly

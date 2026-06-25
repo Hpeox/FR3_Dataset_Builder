@@ -24,7 +24,7 @@ demo_xxx.h5
 │   ├── demo_id: string
 │   ├── success: bool
 │   ├── total_steps: int
-│   ├── schema_version: "v0.2"
+│   ├── schema_version: "v0.3"
 │   ├── nominal_hz: 30
 │   ├── task_name: "<manifest.task_name>"
 │   ├── language_instruction: "<manifest.language_instruction>"
@@ -167,11 +167,12 @@ demo_xxx.h5
     │         encoding = "aligned_depth_to_color_uint16"
     │
     ├── tactile_images
-    │   └── rgb
+    │   └── bgr
     │       shape: [T, 2, 700, 400, 3]
     │       dtype: uint8
     │       chunks: [8, 2, 700, 400, 3]
     │       compression: zstd(level=12)
+    │       channel order: BGR
     │       attrs:
     │         sensor_names = ["left", "right"]
     │

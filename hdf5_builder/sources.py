@@ -13,7 +13,7 @@ from .context import DemoBuildContext, detect_storage_id
 
 RGB_SHAPE = (480, 640, 3)
 DEPTH_SHAPE = (480, 640)
-TACTILE_RGB_SHAPE = (700, 400, 3)
+TACTILE_BGR_SHAPE = (700, 400, 3)
 TACTILE_FORCE_SHAPE = (35, 20, 3)
 TACTILE_RESULTANT_SHAPE = (6,)
 XENSE_LEFT = "OG000544"
@@ -135,8 +135,8 @@ class XenseSource:
         if "frames_data" not in self.obj:
             raise RuntimeError("Xense external file missing frames_data")
 
-    def tactile_rgb(self) -> np.ndarray:
-        return self._stack_pair("rec", TACTILE_RGB_SHAPE, np.dtype("uint8"))
+    def tactile_bgr(self) -> np.ndarray:
+        return self._stack_pair("rec", TACTILE_BGR_SHAPE, np.dtype("uint8"))
 
     def force(self) -> np.ndarray:
         return self._stack_pair("force", TACTILE_FORCE_SHAPE, np.dtype("float32"))

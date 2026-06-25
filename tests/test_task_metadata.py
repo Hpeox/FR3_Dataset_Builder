@@ -84,7 +84,7 @@ def test_batch_dry_run_rejects_missing_task_metadata(tmp_path):
         )
 
 
-def test_write_attrs_uses_manifest_task_metadata_and_v02_schema(tmp_path):
+def test_write_attrs_uses_manifest_task_metadata_and_v03_schema(tmp_path):
     output_path = tmp_path / "attrs.h5"
     ctx = SimpleNamespace(
         demo_id="demo_test",
@@ -98,7 +98,7 @@ def test_write_attrs_uses_manifest_task_metadata_and_v02_schema(tmp_path):
         write_attrs(h5, ctx)
 
     with h5py.File(output_path, "r") as h5:
-        assert SCHEMA_VERSION == "v0.2"
-        assert h5.attrs["schema_version"] == "v0.2"
+        assert SCHEMA_VERSION == "v0.3"
+        assert h5.attrs["schema_version"] == "v0.3"
         assert h5.attrs["task_name"] == TASK_NAME
         assert h5.attrs["language_instruction"] == INSTRUCTION

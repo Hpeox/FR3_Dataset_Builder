@@ -393,7 +393,9 @@ Use the standalone migration tool for legacy artifacts under
 ```
 
 The default invocation validates and migrates matching HDF5, ZIP, and archive
-sidecar sets to task metadata schema `v0.2`. It persists one instruction
+sidecar sets to HDF5 schema `v0.3`. The migration also renames
+`/observations/tactile_images/rgb` to
+`/observations/tactile_images/bgr`. It persists one instruction
 assignment per demo in `task_metadata_migration_state.json`, so interrupted
 runs reuse the same instruction when resumed. HDF5 root attributes are updated
 in place. ZIP updates replace only `demo/manifest.json`; unchanged members keep

@@ -13,7 +13,7 @@ from .context import DemoBuildContext
 from .sources import Ft300Source, RealSenseSource, XenseSource, ZmqSource, topic_for
 
 
-SCHEMA_VERSION = "v0.2"
+SCHEMA_VERSION = "v0.3"
 SPATIAL_CHUNK_T = 8
 LOWDIM_CHUNK_T_MAX = 512
 COMPRESSION = "zstd"
@@ -177,18 +177,18 @@ def write_tactile(h5: h5py.File, ctx: DemoBuildContext) -> None:
     k = min(t, LOWDIM_CHUNK_T_MAX)
     c = min(t, SPATIAL_CHUNK_T)
     xense = XenseSource(ctx)
-    tactile_rgb = xense.tactile_rgb()
+    tactile_bgr = xense.tactile_bgr()
     tactile_images = create_empty_dataset(
         h5,
-        "/observations/tactile_images/rgb",
+        "/observations/tactile_images/bgr",
         (t, 2, 700, 400, 3),
         np.dtype("uint8"),
         (c, 2, 700, 400, 3),
     )
-    assert_dataset_spec("/observations/tactile_images/rgb", tactile_rgb, (t, 2, 700, 400, 3), np.dtype("uint8"))
+    assert_dataset_spec("/observations/tactile_images/bgr", tactile_bgr, (t, 2, 700, 400, 3), np.dtype("uint8"))
     tactile_images.attrs["sensor_names"] = np.asarray(["left", "right"], dtype=h5py.string_dtype("utf-8"))
-    tactile_images[...] = tactile_rgb
-    del tactile_rgb
+    tactile_images[...] = tactile_bgr
+    del tactile_bgr
 
     force = xense.force()
     create_dataset(h5, "/observations/tactile/force", force, (t, 2, 35, 20, 3), np.dtype("float32"), (c, 2, 35, 20, 3))
