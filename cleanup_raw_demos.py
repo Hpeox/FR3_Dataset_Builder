@@ -23,9 +23,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demos-root", type=Path, required=True)
     parser.add_argument("--runtime-frames-root", type=Path, required=True)
+    parser.add_argument("--demo", type=Path, default=None, help="single demo directory for force mode")
     parser.add_argument("--archives-root", type=Path, default=None)
     parser.add_argument("--hdf5-root", type=Path, default=None)
-    parser.add_argument("--mode", choices=("completed", "discarded", "failed"), required=True)
+    parser.add_argument("--mode", choices=("completed", "discarded", "failed", "force"), required=True)
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -37,6 +38,7 @@ def main() -> int:
         runtime_frames_root=args.runtime_frames_root,
         archives_root=args.archives_root,
         hdf5_root=args.hdf5_root,
+        demo_path=args.demo,
         mode=args.mode,
         dry_run=args.dry_run,
     ).resolved()

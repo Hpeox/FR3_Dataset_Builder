@@ -321,6 +321,16 @@ python3 DatasetBuilder/cleanup_raw_demos.py \
   --runtime-frames-root runtime_frames
 ```
 
+Force cleanup deletes one explicit demo without archive/HDF5 completion checks:
+
+```bash
+python3 DatasetBuilder/cleanup_raw_demos.py \
+  --mode force \
+  --demo /home/robot/Desktop/gello-deploy/runtime_sessions/demos/demo_20260704_004455 \
+  --demos-root runtime_sessions/demos \
+  --runtime-frames-root runtime_frames
+```
+
 Add `--dry-run` to any individual command to show its deletion plans without
 creating the cleanup flag or deleting files.
 
@@ -334,6 +344,9 @@ Cleanup modes:
   or repeat builder validation.
 - `discarded`: selects demos with `manifest.status == "discarded"`.
 - `failed`: selects demos with `manifest.status == "failed"`.
+- `force`: selects only the explicit `--demo` directory and skips archive/HDF5
+  completion checks. The demo must still be under `--demos-root`, and all
+  external resources must still resolve under `--runtime-frames-root`.
 
 External resource policy:
 
@@ -343,7 +356,9 @@ External resource policy:
   candidate cleanup target is read from archive metadata
   `source_paths.tac_runtime_config_dir`. For failed demos, the tool derives the
   config directory from the TAC file timestamp using the archive builder's
-  existing timestamp rule. Discarded demos do not reference runtime config.
+  existing timestamp rule. Force mode uses the same TAC timestamp rule when the
+  selected manifest has `sensor_paths.xense`. Discarded demos do not reference
+  runtime config.
 - At startup, the tool scans existing manifests and builds a reverse mapping
   from runtime config directories to referencing demos. A runtime config
   directory is deleted only when the current candidate is the last remaining

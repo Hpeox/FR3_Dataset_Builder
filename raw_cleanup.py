@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 
-CleanupMode = Literal["completed", "discarded", "failed"]
+CleanupMode = Literal["completed", "discarded", "failed", "force"]
 RuntimeConfigAction = Literal["delete", "keep_shared", "not_applicable", "missing_unowned"]
 FLAG_NAME = ".raw_cleanup_in_progress"
 
@@ -23,6 +23,7 @@ class CleanupConfig:
     dry_run: bool = False
     archives_root: Path | None = None
     hdf5_root: Path | None = None
+    demo_path: Path | None = None
 
     def resolved(self) -> "CleanupConfig":
         demos_root = self.demos_root.resolve()
@@ -42,6 +43,14 @@ class CleanupConfig:
                 raise RuntimeError(f"--archives-root is not a directory: {archives_root}")
             if not hdf5_root.is_dir():
                 raise RuntimeError(f"--hdf5-root is not a directory: {hdf5_root}")
+        demo_path = self.demo_path.resolve() if self.demo_path else None
+        if self.mode == "force":
+            if demo_path is None:
+                raise RuntimeError("--demo is required in force mode")
+            demo_path = resolve_demo_dir(demo_path, demos_root)
+            manifest_path = demo_path / "manifest.json"
+            if not manifest_path.is_file():
+                raise RuntimeError(f"--demo must contain manifest.json: {manifest_path}")
         return CleanupConfig(
             demos_root=demos_root,
             runtime_frames_root=runtime_frames_root,
@@ -49,6 +58,7 @@ class CleanupConfig:
             dry_run=self.dry_run,
             archives_root=archives_root,
             hdf5_root=hdf5_root,
+            demo_path=demo_path,
         )
 
 
@@ -261,12 +271,16 @@ def completed_runtime_config_from_archive(archive_json: Path, runtime_frames_roo
     )
 
 
-def derive_failed_runtime_config(manifest: dict[str, Any], runtime_frames_root: Path) -> Path | None:
+def derive_manifest_runtime_config(manifest: dict[str, Any], runtime_frames_root: Path) -> Path | None:
     sensor_paths = manifest.get("sensor_paths") or {}
     tac_path = resolve_runtime_manifest_path(sensor_paths.get("xense"), runtime_frames_root, "sensor_paths.xense")
     if tac_path is None:
         return None
     return select_tac_runtime_config(runtime_frames_root, tac_path)
+
+
+def derive_failed_runtime_config(manifest: dict[str, Any], runtime_frames_root: Path) -> Path | None:
+    return derive_manifest_runtime_config(manifest, runtime_frames_root)
 
 
 def discover(config: CleanupConfig) -> Discovery:
@@ -285,7 +299,7 @@ def discover(config: CleanupConfig) -> Discovery:
         except Exception as exc:
             skipped.append(SkippedDemo(demo_id=demo_id, reason=f"manifest_read_error: {exc}"))
             continue
-        status = str(manifest.get("status"))
+        status = str(manifest.get("status", "missing"))
         runtime_config_path = runtime_config_for_refs(
             demo_id,
             status,
@@ -320,9 +334,11 @@ def runtime_config_for_refs(
             archive_json = config.archives_root / f"{demo_id}.archive.json" if config.archives_root else None
             if archive_json is not None and archive_json.exists():
                 return completed_runtime_config_from_archive(archive_json, config.runtime_frames_root)
-            return derive_failed_runtime_config(manifest, config.runtime_frames_root)
+            return derive_manifest_runtime_config(manifest, config.runtime_frames_root)
         if status == "failed":
-            return derive_failed_runtime_config(manifest, config.runtime_frames_root)
+            return derive_manifest_runtime_config(manifest, config.runtime_frames_root)
+        if config.mode == "force" and status != "discarded":
+            return derive_manifest_runtime_config(manifest, config.runtime_frames_root)
     except Exception as exc:
         warnings.append(f"{demo_id}: runtime_config_ref_skipped: {exc}")
     return None
@@ -336,6 +352,11 @@ def candidate_from_manifest(
     status: str,
     config: CleanupConfig,
 ) -> Candidate | None:
+    if config.mode == "force":
+        if config.demo_path is None or demo_dir != config.demo_path:
+            return None
+        runtime_config_path = derive_manifest_runtime_config(manifest, config.runtime_frames_root)
+        return Candidate(demo_id, demo_dir, manifest_path, manifest, status, None, runtime_config_path)
     if config.mode == "discarded":
         if status != "discarded":
             return None

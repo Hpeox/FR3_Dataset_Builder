@@ -78,7 +78,13 @@ def update_manifest(path: Path, **values: str) -> None:
     write_json(path, payload)
 
 
-def cleanup_config(repo: Path, mode: str, *, dry_run: bool = False) -> CleanupConfig:
+def cleanup_config(
+    repo: Path,
+    mode: str,
+    *,
+    dry_run: bool = False,
+    demo_path: Path | None = None,
+) -> CleanupConfig:
     kwargs = {}
     if mode == "completed":
         kwargs = {"archives_root": repo / "archives", "hdf5_root": repo / "hdf5"}
@@ -87,8 +93,95 @@ def cleanup_config(repo: Path, mode: str, *, dry_run: bool = False) -> CleanupCo
         runtime_frames_root=repo / "runtime_frames",
         mode=mode,
         dry_run=dry_run,
+        demo_path=demo_path,
         **kwargs,
     )
+
+
+def test_force_requires_demo_path(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    make_cleanup_demo(repo, demo_id="demo_20260605_165503", status="interrupted")
+
+    with pytest.raises(RuntimeError, match="--demo is required"):
+        cleanup_config(repo, "force").resolved()
+
+
+def test_force_rejects_demo_outside_demos_root(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    make_cleanup_demo(repo, demo_id="demo_20260605_165503", status="interrupted")
+    outside = tmp_path / "outside" / "demo_20260605_165503"
+    outside.mkdir(parents=True)
+    write_json(outside / "manifest.json", {"status": "interrupted"})
+
+    with pytest.raises(RuntimeError, match="outside configured root"):
+        cleanup_config(repo, "force", demo_path=outside).resolved()
+
+
+def test_force_selects_single_demo_with_any_status_without_completed_check(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    manifest_path = make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165503",
+        status="interrupted",
+        tac_ts="20260605_165503",
+        config_ts="20260605_163106",
+    )
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("completed check must not run in force mode")
+
+    monkeypatch.setattr(raw_cleanup, "check_completed_outputs", fail_if_called)
+    config = cleanup_config(repo, "force", dry_run=True, demo_path=manifest_path.parent)
+    discovery = discover(config)
+    plan = build_plan(discovery.candidates[0], config, discovery.runtime_config_refs)
+
+    assert len(discovery.candidates) == 1
+    assert discovery.candidates[0].status == "interrupted"
+    assert discovery.candidates[0].completion is None
+    assert plan.external_files[0].path.name == "data_FT_20260605_165503.npy"
+    assert plan.external_files[1].path.name == "data_TAC_20260605_165503.npy"
+    assert plan.runtime_config.action == "delete"
+
+
+def test_force_runtime_config_keeps_shared_reference(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    target = make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165900",
+        status="interrupted",
+        tac_ts="20260605_165900",
+        config_ts="20260605_163106",
+    )
+    make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_170000",
+        status="failed",
+        tac_ts="20260605_170000",
+        config_ts="20260605_163106",
+    )
+    config = cleanup_config(repo, "force", demo_path=target.parent)
+    discovery = discover(config)
+    plan = build_plan(discovery.candidates[0], config, discovery.runtime_config_refs)
+
+    assert len(discovery.candidates) == 1
+    assert plan.runtime_config.action == "keep_shared"
+    assert plan.runtime_config.shared_with == ("demo_20260605_170000",)
+
+
+def test_force_argparse_requires_existing_required_roots(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "cleanup_raw_demos.py",
+            "--mode",
+            "force",
+            "--demo",
+            "runtime_sessions/demos/demo_xxx",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        cleanup_raw_demos.parse_args()
 
 
 def test_completed_dry_run_keeps_files_and_uses_archive_runtime_config(tmp_path: Path) -> None:
