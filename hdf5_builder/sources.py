@@ -16,8 +16,10 @@ DEPTH_SHAPE = (480, 640)
 TACTILE_BGR_SHAPE = (700, 400, 3)
 TACTILE_FORCE_SHAPE = (35, 20, 3)
 TACTILE_RESULTANT_SHAPE = (6,)
-XENSE_LEFT = "OG000544"
-XENSE_RIGHT = "OG001009"
+XENSE_SENSOR_ID_CANDIDATES = (
+    ("left", ("OG001622", "OG000544")),
+    ("right", ("OG001623", "OG001009")),
+)
 
 
 def require_array(name: str, value: np.ndarray, shape: tuple[int, ...], dtype: np.dtype[Any]) -> np.ndarray:
@@ -157,10 +159,11 @@ class XenseSource:
             if frame_key not in frames:
                 raise RuntimeError(f"Xense frames_data missing frame {frame_key}")
             frame = frames[frame_key]
-            for sensor_axis, sensor_id in enumerate((XENSE_LEFT, XENSE_RIGHT)):
-                key = f"{sensor_id}_{suffix}"
-                if key not in frame:
-                    raise RuntimeError(f"Xense frame {frame_key} missing field {key}")
+            for sensor_axis, (_role, sensor_ids) in enumerate(XENSE_SENSOR_ID_CANDIDATES):
+                key = next((f"{sensor_id}_{suffix}" for sensor_id in sensor_ids if f"{sensor_id}_{suffix}" in frame), None)
+                if key is None or key not in frame:
+                    expected = ", ".join(f"{sensor_id}_{suffix}" for sensor_id in sensor_ids)
+                    raise RuntimeError(f"Xense frame {frame_key} missing one of: {expected}")
                 name = f"Xense {frame_key} {key}"
                 if dtype == np.dtype("uint8"):
                     result[out_row, sensor_axis] = require_array(name, frame[key], item_shape, dtype)

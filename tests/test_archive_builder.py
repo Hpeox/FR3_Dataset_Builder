@@ -90,7 +90,8 @@ def test_build_archive_layout_and_default_manifest_policy(tmp_path: Path, monkey
         assert f"{root}/demo/ft300_timestamps.npz" not in names
         assert f"{root}/runtime_frames/data_FT_20260605_165503.npy.zst" in names
         assert f"{root}/runtime_frames/data_FT_20260605_165503.npy" not in names
-        assert f"{root}/runtime_frames/runtime_config/runtime_OG000544" in names
+        assert f"{root}/runtime_frames/runtime_config/runtime_OG001622" in names
+        assert f"{root}/runtime_frames/runtime_config/runtime_OG001623" in names
         assert f"{root}/demo/rosbag/rosbag_0.mcap" in names
         assert zf.getinfo(f"{root}/demo/aligned/aligned_index.npz").compress_type == zipfile.ZIP_STORED
         assert zf.getinfo(f"{root}/demo/manifest.json").compress_type == zipfile.ZIP_DEFLATED
@@ -136,7 +137,8 @@ def test_restore_archive_restores_zst_and_refuses_overwrite(tmp_path: Path, monk
     assert (restored_demo / "ft300_timestamps.npz").exists()
     assert (restored_demo / "aligned" / "aligned_index.npz").exists()
     assert (restore_root / "runtime_frames" / "data_TAC_20260605_165503.npy").exists()
-    assert (restore_root / "runtime_frames" / "20260605_163106" / "runtime_OG000544").exists()
+    assert (restore_root / "runtime_frames" / "20260605_163106" / "runtime_OG001622").exists()
+    assert (restore_root / "runtime_frames" / "20260605_163106" / "runtime_OG001623").exists()
 
     try:
         restore_archive(ctx.archive_json_path, None, restore_root, force=False)

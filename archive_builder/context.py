@@ -17,7 +17,10 @@ SINGLE_ARCHIVE_ROOT = DATASET_BUILDER_ROOT / "outputs"
 BATCH_ARCHIVE_ROOT = DATASET_ROOT / "Archived"
 REQUIRED_NPZ = ("ft300", "xense", "realsense", "zmq")
 REQUIRED_SENSOR_PATHS = ("ft300", "xense")
-TAC_CONFIG_SENSOR_FILES = ("runtime_OG000544", "runtime_OG001009")
+TAC_CONFIG_SENSOR_FILE_CANDIDATES = {
+    "left": ("runtime_OG001622", "runtime_OG000544"),
+    "right": ("runtime_OG001623", "runtime_OG001009"),
+}
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -70,6 +73,16 @@ def require_regular_file(path: Path, label: str) -> None:
         raise RuntimeError(f"{label} must not be a symlink: {path}")
     if not path.is_file():
         raise RuntimeError(f"{label} must be a regular file: {path}")
+
+
+def select_existing_regular_file(directory: Path, candidates: tuple[str, ...], label: str) -> tuple[str, Path]:
+    for name in candidates:
+        path = directory / name
+        if path.exists():
+            require_regular_file(path, label)
+            return name, path.resolve()
+    expected = ", ".join(candidates)
+    raise RuntimeError(f"missing required {label}; expected one of: {expected} under {directory}")
 
 
 @dataclass
@@ -185,10 +198,13 @@ class ArchiveContext:
 
     def _resolve_tac_config_files(self) -> dict[str, Path]:
         result = {}
-        for name in TAC_CONFIG_SENSOR_FILES:
-            path = self.selected_tac_config_dir / name
-            require_regular_file(path, f"TAC runtime config {name}")
-            result[name] = path.resolve()
+        for _role, candidates in TAC_CONFIG_SENSOR_FILE_CANDIDATES.items():
+            name, path = select_existing_regular_file(
+                self.selected_tac_config_dir,
+                candidates,
+                "TAC runtime config",
+            )
+            result[name] = path
         return result
 
 

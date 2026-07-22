@@ -160,6 +160,8 @@ Sensor semantic mapping after review:
 
 - `OG000544`: `left`
 - `OG001009`: `right`
+- `OG001622`: `left`
+- `OG001623`: `right`
 
 Access pattern:
 

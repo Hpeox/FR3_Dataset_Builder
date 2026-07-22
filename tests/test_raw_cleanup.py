@@ -25,8 +25,8 @@ def make_cleanup_demo(
     frames_root = repo / "runtime_frames"
     config_dir = frames_root / config_ts
     config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / "runtime_OG000544").write_bytes(b"left")
-    (config_dir / "runtime_OG001009").write_bytes(b"right")
+    (config_dir / "runtime_OG001622").write_bytes(b"left")
+    (config_dir / "runtime_OG001623").write_bytes(b"right")
 
     sensor_paths = {}
     if with_sensor_paths:

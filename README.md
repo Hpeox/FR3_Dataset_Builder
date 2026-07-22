@@ -183,7 +183,10 @@ result.
 Archives preserve the raw demo inputs needed to restore a demo later. The
 archive builder includes the demo metadata and aligned artifacts, compresses
 demo NPZ and external NPY inputs with `zstd`, converts rosbag data to compressed
-MCAP, and stores selected TAC runtime config files.
+MCAP, and stores selected TAC runtime config files. For tactile runtime configs,
+the builder resolves either the current `runtime_OG001622`/`runtime_OG001623`
+pair or the legacy `runtime_OG000544`/`runtime_OG001009` pair, depending on
+which files exist in the selected timestamped directory.
 
 ### Single Archive
 

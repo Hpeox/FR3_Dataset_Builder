@@ -174,6 +174,8 @@ Tactile semantic mapping after review:
 
 - `OG000544`: `left`
 - `OG001009`: `right`
+- `OG001622`: `left`
+- `OG001623`: `right`
 
 The selected builder strategy is to load the whole Xense object with `np.load(..., allow_pickle=True).item()` and stream rows from memory.
 

@@ -68,8 +68,8 @@ def make_demo(repo_root: Path, demo_id: str = "demo_20260605_165503") -> Path:
     (rosbag_dir / "rosbag_0.mcap").write_bytes(b"source mcap")
     (frames_dir / "data_FT_20260605_165503.npy").write_bytes(b"ft")
     (frames_dir / "data_TAC_20260605_165503.npy").write_bytes(b"tac")
-    (config_dir / "runtime_OG000544").write_bytes(b"left config")
-    (config_dir / "runtime_OG001009").write_bytes(b"right config")
+    (config_dir / "runtime_OG001622").write_bytes(b"left config")
+    (config_dir / "runtime_OG001623").write_bytes(b"right config")
     return demo_dir / "manifest.json"
 
 
