@@ -26,7 +26,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--demo", type=Path, default=None, help="single demo directory for force mode")
     parser.add_argument("--archives-root", type=Path, default=None)
     parser.add_argument("--hdf5-root", type=Path, default=None)
-    parser.add_argument("--mode", choices=("completed", "discarded", "failed", "force"), required=True)
+    parser.add_argument(
+        "--mode",
+        choices=("completed", "tactile_warning", "discarded", "failed", "force"),
+        required=True,
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -157,6 +161,13 @@ def print_plan(plan: CleanupPlan, index: int, total: int, dry_run: bool) -> None
 
 
 def print_manifest_reason_fields(manifest: dict, status: str) -> None:
+    postcheck = manifest.get("xense_tactile_postcheck")
+    if isinstance(postcheck, dict) and postcheck.get("has_warning") is True:
+        print(
+            "xense_tactile_warnings: "
+            f"{json.dumps(postcheck.get('warnings', []), ensure_ascii=True)}",
+            flush=True,
+        )
     if status == "discarded":
         print(f"discard_reason: {manifest.get('discard_reason', '')}", flush=True)
     elif status == "failed":

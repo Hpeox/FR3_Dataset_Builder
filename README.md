@@ -25,8 +25,8 @@ linked documents below. This README is the operational entry point.
 - `restore_archive.py`: restore a cold-storage archive into a raw dataset tree.
 - `cleanup_raw_demos.py`: interactively delete raw demos and owned
   `runtime_frames` resources after archive/HDF5 publication or rejection.
-- `cleanup_raw_demos.sh`: run raw demo cleanup for `completed`, `discarded`,
-  and `failed` demos in sequence.
+- `cleanup_raw_demos.sh`: run raw demo cleanup for `tactile_warning`,
+  `completed`, `discarded`, and `failed` demos in sequence.
 - `archive_builder/`: archive discovery, compression, rosbag conversion,
   archive metadata, ZIP writing, dry-run checks, and restore logic.
 - `tools/`: ad hoc inspection and validation tools.
@@ -279,14 +279,14 @@ only when existing restored files may be overwritten.
 directories and their owned external `runtime_frames` files. It never edits raw
 manifests or archive metadata.
 
-Run all three cleanup modes with one command:
+Run all four cleanup modes with one command:
 
 ```bash
 bash DatasetBuilder/cleanup_raw_demos.sh
 ```
 
-The wrapper runs `completed`, `discarded`, and `failed` in sequence with the
-existing parameters:
+The wrapper runs `tactile_warning`, `completed`, `discarded`, and `failed` in
+sequence with the existing parameters:
 
 - `--demos-root runtime_sessions/demos`
 - `--runtime-frames-root runtime_frames`
@@ -294,7 +294,7 @@ existing parameters:
 - `--hdf5-root /data/internal/DATASET` for `completed`
 
 Use `bash DatasetBuilder/cleanup_raw_demos.sh --dry-run` to show the same
-per-demo deletion plans for all three modes without creating the cleanup flag
+per-demo deletion plans for all four modes without creating the cleanup flag
 or deleting files.
 
 Each mode can also be run separately with the original commands.
@@ -310,9 +310,14 @@ python3 DatasetBuilder/cleanup_raw_demos.py \
   --hdf5-root /data/internal/DATASET
 ```
 
-Rejected demos do not require archive or HDF5 roots:
+Tactile-warning and rejected demos do not require archive or HDF5 roots:
 
 ```bash
+python3 DatasetBuilder/cleanup_raw_demos.py \
+  --mode tactile_warning \
+  --demos-root runtime_sessions/demos \
+  --runtime-frames-root runtime_frames
+
 python3 DatasetBuilder/cleanup_raw_demos.py \
   --mode discarded \
   --demos-root runtime_sessions/demos \
@@ -345,6 +350,11 @@ Cleanup modes:
   metadata `zip_size` must match the actual ZIP file size. This is a lightweight
   completion check and does not open ZIPs, compute SHA-256, read HDF5 payloads,
   or repeat builder validation.
+- `tactile_warning`: selects demos with `manifest.status == "done"` and
+  `manifest.xense_tactile_postcheck.has_warning == true`. It skips aligned,
+  archive, and HDF5 completion checks. Because `completed` retains its original
+  selection rules, a warning demo skipped in this mode can appear again in
+  `completed` when its completed outputs exist.
 - `discarded`: selects demos with `manifest.status == "discarded"`.
 - `failed`: selects demos with `manifest.status == "failed"`.
 - `force`: selects only the explicit `--demo` directory and skips archive/HDF5
@@ -359,9 +369,9 @@ External resource policy:
   candidate cleanup target is read from archive metadata
   `source_paths.tac_runtime_config_dir`. For failed demos, the tool derives the
   config directory from the TAC file timestamp using the archive builder's
-  existing timestamp rule. Force mode uses the same TAC timestamp rule when the
-  selected manifest has `sensor_paths.xense`. Discarded demos do not reference
-  runtime config.
+  existing timestamp rule. Tactile-warning and force modes use the same TAC
+  timestamp rule when the selected manifest has `sensor_paths.xense`.
+  Discarded demos do not reference runtime config.
 - At startup, the tool scans existing manifests and builds a reverse mapping
   from runtime config directories to referencing demos. A runtime config
   directory is deleted only when the current candidate is the last remaining

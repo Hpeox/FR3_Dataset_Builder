@@ -78,6 +78,15 @@ def update_manifest(path: Path, **values: str) -> None:
     write_json(path, payload)
 
 
+def set_tactile_postcheck(path: Path, has_warning: object, warnings: list[str] | None = None) -> None:
+    payload = raw_cleanup.read_json(path)
+    payload["xense_tactile_postcheck"] = {
+        "has_warning": has_warning,
+        "warnings": warnings or [],
+    }
+    write_json(path, payload)
+
+
 def cleanup_config(
     repo: Path,
     mode: str,
@@ -182,6 +191,108 @@ def test_force_argparse_requires_existing_required_roots(monkeypatch) -> None:
 
     with pytest.raises(SystemExit):
         cleanup_raw_demos.parse_args()
+
+
+def test_tactile_warning_selects_done_boolean_true_without_completion_check(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    manifest_path = make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165503",
+        status="done",
+        tac_ts="20260605_165503",
+        config_ts="20260605_163106",
+    )
+    set_tactile_postcheck(manifest_path, True, ["right sensor edge warning"])
+    (manifest_path.parent / "aligned" / "aligned_manifest.json").unlink()
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("completed check must not run in tactile_warning mode")
+
+    monkeypatch.setattr(raw_cleanup, "check_completed_outputs", fail_if_called)
+    config = cleanup_config(repo, "tactile_warning")
+    discovery = discover(config)
+    plan = build_plan(discovery.candidates[0], config, discovery.runtime_config_refs)
+
+    assert [candidate.demo_id for candidate in discovery.candidates] == [
+        "demo_20260605_165503"
+    ]
+    assert discovery.candidates[0].completion is None
+    assert plan.runtime_config.path == (repo / "runtime_frames" / "20260605_163106").resolve()
+    assert plan.runtime_config.action == "delete"
+
+
+@pytest.mark.parametrize("has_warning", [False, "true", 1, None])
+def test_tactile_warning_requires_strict_boolean_true(
+    tmp_path: Path,
+    has_warning: object,
+) -> None:
+    repo = tmp_path / "repo"
+    manifest_path = make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165503",
+        status="done",
+    )
+    set_tactile_postcheck(manifest_path, has_warning)
+
+    discovery = discover(cleanup_config(repo, "tactile_warning"))
+
+    assert discovery.candidates == []
+
+
+def test_tactile_warning_rejects_missing_postcheck_and_non_done_status(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165503",
+        status="done",
+        tac_ts="20260605_165503",
+    )
+    failed_manifest = make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165900",
+        status="failed",
+        tac_ts="20260605_165900",
+    )
+    set_tactile_postcheck(failed_manifest, True)
+
+    discovery = discover(cleanup_config(repo, "tactile_warning"))
+
+    assert discovery.candidates == []
+
+
+def test_tactile_warning_prints_warnings_and_keeps_shared_runtime_config(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    repo = tmp_path / "repo"
+    manifest_path = make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165503",
+        status="done",
+        tac_ts="20260605_165503",
+        config_ts="20260605_163106",
+    )
+    set_tactile_postcheck(manifest_path, True, ["right sensor edge warning"])
+    make_cleanup_demo(
+        repo,
+        demo_id="demo_20260605_165900",
+        status="failed",
+        tac_ts="20260605_165900",
+        config_ts="20260605_163106",
+    )
+    config = cleanup_config(repo, "tactile_warning")
+    discovery = discover(config)
+    plan = build_plan(discovery.candidates[0], config, discovery.runtime_config_refs)
+
+    cleanup_raw_demos.print_plan(plan, 1, 1, dry_run=True)
+
+    out = capsys.readouterr().out
+    assert 'xense_tactile_warnings: ["right sensor edge warning"]' in out
+    assert plan.runtime_config.action == "keep_shared"
+    assert plan.runtime_config.shared_with == ("demo_20260605_165900",)
 
 
 def test_completed_dry_run_keeps_files_and_uses_archive_runtime_config(tmp_path: Path) -> None:

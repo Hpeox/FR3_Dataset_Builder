@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 
-CleanupMode = Literal["completed", "discarded", "failed", "force"]
+CleanupMode = Literal["completed", "tactile_warning", "discarded", "failed", "force"]
 RuntimeConfigAction = Literal["delete", "keep_shared", "not_applicable", "missing_unowned"]
 FLAG_NAME = ".raw_cleanup_in_progress"
 
@@ -365,6 +365,16 @@ def candidate_from_manifest(
         if status != "failed":
             return None
         runtime_config_path = derive_failed_runtime_config(manifest, config.runtime_frames_root)
+        return Candidate(demo_id, demo_dir, manifest_path, manifest, status, None, runtime_config_path)
+    if config.mode == "tactile_warning":
+        postcheck = manifest.get("xense_tactile_postcheck")
+        if (
+            status != "done"
+            or not isinstance(postcheck, dict)
+            or postcheck.get("has_warning") is not True
+        ):
+            return None
+        runtime_config_path = derive_manifest_runtime_config(manifest, config.runtime_frames_root)
         return Candidate(demo_id, demo_dir, manifest_path, manifest, status, None, runtime_config_path)
 
     if status != "done":
