@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -72,7 +75,7 @@ def make_cleanup_demo(
     return demo_dir / "manifest.json"
 
 
-def update_manifest(path: Path, **values: str) -> None:
+def update_manifest(path: Path, **values: object) -> None:
     payload = raw_cleanup.read_json(path)
     payload.update(values)
     write_json(path, payload)
@@ -113,6 +116,83 @@ def test_force_requires_demo_path(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="--demo is required"):
         cleanup_config(repo, "force").resolved()
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_manifest_only_without_outputs_preserves_shared_config(tmp_path: Path, monkeypatch, dry_run) -> None:
+    repo = tmp_path / "repo"
+    target = make_cleanup_demo(repo, demo_id="demo_20260605_165503", status="done")
+    update_manifest(target, archieved=True, h5_generated=True)
+    (target.parent / "aligned" / "aligned_manifest.json").unlink()
+    other = make_cleanup_demo(
+        repo, demo_id="demo_20260605_170000", status="interrupted", tac_ts="20260605_170000"
+    )
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("published outputs must not be checked")
+
+    monkeypatch.setattr(raw_cleanup, "check_completed_outputs", fail_if_called)
+    monkeypatch.setattr(raw_cleanup, "completed_runtime_config_from_archive", fail_if_called)
+    config = cleanup_config(repo, "manifest_only", dry_run=dry_run)
+    config.archives_root = repo / "missing_archives"
+    config.hdf5_root = repo / "missing_hdf5"
+    discovery = discover(config)
+    assert [candidate.demo_id for candidate in discovery.candidates] == [target.parent.name]
+    plan = build_plan(discovery.candidates[0], config, discovery.runtime_config_refs)
+    assert plan.runtime_config.action == "keep_shared"
+    result = delete_plan(plan, config)
+    assert result.status == ("dry_run_would_delete" if dry_run else "succeeded")
+    assert target.exists() == dry_run
+    assert (repo / "runtime_frames" / "data_TAC_20260605_165503.npy").exists() == dry_run
+    assert other.exists()
+    assert plan.runtime_config.path.is_dir()
+
+
+@pytest.mark.parametrize("status,archieved,h5_generated", [
+    ("done", True, True),
+    ("done", False, True),
+    ("done", True, False),
+    ("done", "true", True),
+    ("done", True, 1),
+    ("done", None, True),
+    ("done", True, None),
+    ("failed", True, True),
+    ("interrupted", True, True),
+])
+def test_manifest_only_requires_publication_flags(tmp_path, status, archieved, h5_generated) -> None:
+    repo = tmp_path / "repo"
+    manifest_path = make_cleanup_demo(repo, demo_id="demo_20260605_165503", status=status)
+    flags = {key: value for key, value in {
+        "archieved": archieved, "h5_generated": h5_generated,
+    }.items() if value is not None}
+    update_manifest(manifest_path, **flags)
+    discovery = discover(cleanup_config(repo, "manifest_only"))
+    assert bool(discovery.candidates) == (status == "done" and archieved is True and h5_generated is True)
+
+
+@pytest.mark.parametrize("args,modes", [
+    ([], ["tactile_warning", "completed", "discarded", "failed"]),
+    (["--manifest-only", "--dry-run"], ["manifest_only"]),
+    (["--dry-run", "--manifest-only"], ["manifest_only"]),
+    (["--invalid"], []),
+])
+def test_cleanup_wrapper_routes_modes_without_running_cleanup(tmp_path, args, modes) -> None:
+    stub = tmp_path / "python3"
+    stub.write_text(
+        '#!/usr/bin/python3\nimport json, sys\nprint(json.dumps(sys.argv[1:]))\n',
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    wrapper = Path(cleanup_raw_demos.__file__).with_suffix(".sh")
+    result = subprocess.run(
+        ["bash", str(wrapper), *args],
+        env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"},
+        capture_output=True, text=True,
+    )
+    calls = [json.loads(line) for line in result.stdout.splitlines()]
+    assert result.returncode == (0 if modes else 2)
+    assert [call[call.index("--mode") + 1] for call in calls] == modes
+    assert all(("--dry-run" in call) == ("--dry-run" in args) for call in calls)
 
 
 def test_force_rejects_demo_outside_demos_root(tmp_path: Path) -> None:

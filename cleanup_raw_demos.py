@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hdf5-root", type=Path, default=None)
     parser.add_argument(
         "--mode",
-        choices=("completed", "tactile_warning", "discarded", "failed", "force"),
+        choices=("completed", "manifest_only", "tactile_warning", "discarded", "failed", "force"),
         required=True,
     )
     parser.add_argument("--dry-run", action="store_true")
@@ -132,6 +132,8 @@ def print_plan(plan: CleanupPlan, index: int, total: int, dry_run: bool) -> None
     prefix = "DRY-RUN " if dry_run else ""
     print(f"\n[{index}/{total}] {prefix}{candidate.demo_id}", flush=True)
     print(f"mode_status: {candidate.status}", flush=True)
+    if candidate.manifest.get("archieved") is True and candidate.manifest.get("h5_generated") is True:
+        print("manifest_flags: archieved=true h5_generated=true", flush=True)
     print_manifest_reason_fields(candidate.manifest, candidate.status)
     if candidate.completion is not None:
         print(

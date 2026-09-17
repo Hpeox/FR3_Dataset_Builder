@@ -2,24 +2,29 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: $0 [--dry-run]" >&2
+    echo "Usage: $0 [--dry-run] [--manifest-only]" >&2
 }
 
 extra_args=()
-if [[ $# -gt 1 ]]; then
-    usage
-    exit 2
-fi
-if [[ $# -eq 1 ]]; then
-    if [[ $1 != "--dry-run" ]]; then
-        usage
-        exit 2
-    fi
-    extra_args+=("$1")
-fi
+manifest_only=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) extra_args+=("$arg") ;;
+        --manifest-only) manifest_only=true ;;
+        *) usage; exit 2 ;;
+    esac
+done
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/.." && pwd)"
+
+if [[ $manifest_only == true ]]; then
+    exec python3 "${script_dir}/cleanup_raw_demos.py" \
+        --mode manifest_only \
+        --demos-root "${repo_root}/runtime_sessions/demos" \
+        --runtime-frames-root "${repo_root}/runtime_frames" \
+        "${extra_args[@]}"
+fi
 
 python3 "${script_dir}/cleanup_raw_demos.py" \
     --mode tactile_warning \

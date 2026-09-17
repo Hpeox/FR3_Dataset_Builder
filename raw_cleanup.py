@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 
-CleanupMode = Literal["completed", "tactile_warning", "discarded", "failed", "force"]
+CleanupMode = Literal["completed", "manifest_only", "tactile_warning", "discarded", "failed", "force"]
 RuntimeConfigAction = Literal["delete", "keep_shared", "not_applicable", "missing_unowned"]
 FLAG_NAME = ".raw_cleanup_in_progress"
 
@@ -331,13 +331,16 @@ def runtime_config_for_refs(
 ) -> Path | None:
     try:
         if status == "done":
-            archive_json = config.archives_root / f"{demo_id}.archive.json" if config.archives_root else None
+            archive_json = (
+                config.archives_root / f"{demo_id}.archive.json"
+                if config.archives_root and config.mode != "manifest_only" else None
+            )
             if archive_json is not None and archive_json.exists():
                 return completed_runtime_config_from_archive(archive_json, config.runtime_frames_root)
             return derive_manifest_runtime_config(manifest, config.runtime_frames_root)
         if status == "failed":
             return derive_manifest_runtime_config(manifest, config.runtime_frames_root)
-        if config.mode == "force" and status != "discarded":
+        if config.mode in ("force", "manifest_only") and status != "discarded":
             return derive_manifest_runtime_config(manifest, config.runtime_frames_root)
     except Exception as exc:
         warnings.append(f"{demo_id}: runtime_config_ref_skipped: {exc}")
@@ -352,6 +355,15 @@ def candidate_from_manifest(
     status: str,
     config: CleanupConfig,
 ) -> Candidate | None:
+    if config.mode == "manifest_only":
+        if (
+            status != "done"
+            or manifest.get("archieved") is not True
+            or manifest.get("h5_generated") is not True
+        ):
+            return None
+        runtime_config_path = derive_manifest_runtime_config(manifest, config.runtime_frames_root)
+        return Candidate(demo_id, demo_dir, manifest_path, manifest, status, None, runtime_config_path)
     if config.mode == "force":
         if config.demo_path is None or demo_dir != config.demo_path:
             return None

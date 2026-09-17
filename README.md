@@ -299,6 +299,21 @@ or deleting files.
 
 Each mode can also be run separately with the original commands.
 
+When published outputs have been moved, use manifest-only cleanup:
+
+```bash
+bash DatasetBuilder/cleanup_raw_demos.sh --manifest-only --dry-run
+bash DatasetBuilder/cleanup_raw_demos.sh --manifest-only
+```
+
+This runs only `manifest_only`, scanning all demos without requiring individual
+`--demo` paths. It selects raw manifests with `status == "done"`,
+`archieved == true`, and `h5_generated == true` (strict JSON booleans). It trusts
+these publication flags and skips aligned, ZIP, archive JSON, and HDF5 completion
+checks; moved outputs and missing output roots are allowed. Per-demo confirmation,
+deletion path checks, and shared runtime-config protection still apply. Runtime
+config ownership is derived from the raw manifests, as in force mode.
+
 Completed demos require explicit archive and HDF5 roots:
 
 ```bash
@@ -344,6 +359,8 @@ creating the cleanup flag or deleting files.
 
 Cleanup modes:
 
+- `manifest_only`: selects completed publication flags as described above without
+  checking published outputs. No archive or HDF5 roots are required.
 - `completed`: selects demos with `manifest.status == "done"` and
   `aligned/aligned_manifest.json.status == "done"`, then requires non-empty
   `<demo_id>.zip`, `<demo_id>.archive.json`, and `<demo_id>.h5`. The archive
